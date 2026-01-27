@@ -23,6 +23,7 @@ import {
   Languages,
   Ghost
 } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 import { MangaStatus, MangaTitle, User } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -357,6 +358,7 @@ const App: React.FC = () => {
 
         {showAuth && <Auth onClose={() => setShowAuth(false)} onLogin={handleLogin} language={language} />}
         {selectedManga && <MangaModal manga={selectedManga} onClose={() => setSelectedManga(null)} language={language} />}
+        <Analytics />
       </div>
   );
 };
