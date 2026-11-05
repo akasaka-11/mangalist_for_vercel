@@ -4,6 +4,7 @@ import { MangaTitle, MangaStatus } from '../types';
 import { CHAPTER_MARGIN, chapterLimit, NO_LIMIT } from '../lib/chapters';
 import { Plus, Minus, BookOpen, CheckCircle, XCircle, Trash2, Star, Clock, Search, ChevronDown, Cloud, CloudOff, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { SyncState } from '../hooks/useLibrarySync';
+import { Language } from '../lib/i18n';
 
 interface DashboardProps {
   mangaList: MangaTitle[];
@@ -13,7 +14,7 @@ interface DashboardProps {
   onSelect: (manga: MangaTitle) => void;
   onDiscover: () => void;
   syncState: SyncState;
-  language: 'en' | 'ru';
+  language: Language;
   hideLabels?: boolean;
 }
 
@@ -65,7 +66,7 @@ const ChapterInput: React.FC<{ value: number; max: number; label: string; onComm
 const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, updateStatus, onRemove, onSelect, onDiscover, syncState, language, hideLabels }) => {
   const [filter, setFilter] = useState<MangaStatus | 'ALL'>('ALL');
 
-  const labels: Labels = language === 'en' ? {
+  const labels: Labels = ({ en: {
     reading: 'Reading', finished: 'Completed', plan: 'Plan to read', dropped: 'Dropped', all: 'All',
     remove: 'Remove from library', ch: 'Ch.', ongoing: 'Ongoing', chapterInput: 'Current chapter',
     latestHint: 'Latest known chapter: {latest} (MangaUpdates). You can mark up to {limit}.',
@@ -73,7 +74,7 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
     prevChapter: 'Previous chapter', nextChapter: 'Next chapter', status: 'Status',
     emptyTitle: 'Your library is empty', emptySub: 'Find a series in Discover and add it to your list.',
     emptyFilter: 'No titles with this status yet', discover: 'Discover', confirmRemove: 'Remove "{title}" from your library?'
-  } : {
+  }, ru: {
     reading: 'Читаю', finished: 'Прочитано', plan: 'В планах', dropped: 'Брошено', all: 'Все',
     remove: 'Удалить из библиотеки', ch: 'Гл.', ongoing: 'Выходит', chapterInput: 'Текущая глава',
     latestHint: 'Последняя известная глава: {latest} (MangaUpdates). Можно отметить до {limit}.',
@@ -81,21 +82,35 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
     prevChapter: 'Предыдущая глава', nextChapter: 'Следующая глава', status: 'Статус',
     emptyTitle: 'Библиотека пуста', emptySub: 'Найдите тайтл в поиске и добавьте его в список.',
     emptyFilter: 'Пока нет тайтлов с этим статусом', discover: 'Поиск', confirmRemove: 'Удалить «{title}» из библиотеки?'
-  };
+  }, kk: {
+    reading: 'Оқып жүрмін', finished: 'Оқып шықтым', plan: 'Жоспарда', dropped: 'Тастадым', all: 'Барлығы',
+    remove: 'Кітапханадан өшіру', ch: 'Тар.', ongoing: 'Шығып жатыр', chapterInput: 'Ағымдағы тарау',
+    latestHint: 'Белгілі соңғы тарау: {latest} (MangaUpdates). {limit}-ге дейін белгілеуге болады.',
+    unknownHint: 'Тараулар саны белгісіз',
+    prevChapter: 'Алдыңғы тарау', nextChapter: 'Келесі тарау', status: 'Күйі',
+    emptyTitle: 'Кітапхана бос', emptySub: 'Іздеу арқылы тайтл тауып, тізімге қосыңыз.',
+    emptyFilter: 'Бұл күйде әзірге тайтл жоқ', discover: 'Іздеу', confirmRemove: '«{title}» кітапханадан өшірілсін бе?'
+  } } satisfies Record<Language, Labels>)[language];
 
-  const syncText: Record<Exclude<SyncState, 'disabled'>, string> = language === 'en' ? {
+  const syncText: Record<Exclude<SyncState, 'disabled'>, string> = ({ en: {
     syncing: 'Syncing…',
     synced: 'Synced with your account',
     offline: 'Offline — changes are saved on this device and will sync later',
     notSetUp: 'Sync is not set up yet — the list is stored on this device only',
     error: "Couldn't sync — will retry automatically",
-  } : {
+  }, ru: {
     syncing: 'Синхронизация…',
     synced: 'Синхронизировано с аккаунтом',
     offline: 'Нет сети — изменения сохранены на устройстве и синхронизируются позже',
     notSetUp: 'Синхронизация ещё не настроена — список хранится только на этом устройстве',
     error: 'Не удалось синхронизировать — повторим автоматически',
-  };
+  }, kk: {
+    syncing: 'Синхрондау…',
+    synced: 'Аккаунтпен синхрондалды',
+    offline: 'Желі жоқ — өзгерістер құрылғыда сақталды, кейін синхрондалады',
+    notSetUp: 'Синхрондау әлі бапталмаған — тізім тек осы құрылғыда сақталады',
+    error: 'Синхрондау мүмкін болмады — автоматты түрде қайталаймыз',
+  } })[language];
   const syncIndicator = syncState === 'disabled' ? null : (
       <p role="status" className={`flex items-center gap-2 text-xs ${
           syncState === 'synced' ? 'text-slate-500' : syncState === 'syncing' ? 'text-slate-400' : 'text-amber-400'

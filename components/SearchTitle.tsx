@@ -2,17 +2,34 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Loader2, Star, BookOpen, Clock, CheckCircle, Ghost, Filter, X, AlertTriangle, RotateCw } from 'lucide-react';
 import { MangaTitle, MangaStatus } from '../types';
+import { Language } from '../lib/i18n';
 
 interface SearchTitleProps {
   onAdd: (manga: MangaTitle) => void;
   mangaList: MangaTitle[];
   includeAdult: boolean;
   onSelect: (manga: MangaTitle) => void;
-  language: 'en' | 'ru';
+  language: Language;
   hideLabels?: boolean;
 }
 
-const GENRES = ["Action", "Adventure", "Comedy", "Drama", "Ecchi", "Fantasy", "Horror", "Mystery", "Psychological", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"];
+// AniList genre ids (sent to the API as-is) and their display names.
+const GENRES = ["Action", "Adventure", "Comedy", "Drama", "Ecchi", "Fantasy", "Horror", "Mystery", "Psychological", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"] as const;
+type Genre = typeof GENRES[number];
+const GENRE_NAMES: Record<Exclude<Language, 'en'>, Record<Genre, string>> = {
+  ru: {
+    "Action": "Экшен", "Adventure": "Приключения", "Comedy": "Комедия", "Drama": "Драма", "Ecchi": "Этти",
+    "Fantasy": "Фэнтези", "Horror": "Ужасы", "Mystery": "Детектив", "Psychological": "Психология",
+    "Romance": "Романтика", "Sci-Fi": "Научная фантастика", "Slice of Life": "Повседневность",
+    "Sports": "Спорт", "Supernatural": "Сверхъестественное", "Thriller": "Триллер",
+  },
+  kk: {
+    "Action": "Экшн", "Adventure": "Шытырман оқиға", "Comedy": "Комедия", "Drama": "Драма", "Ecchi": "Этти",
+    "Fantasy": "Фэнтези", "Horror": "Қорқынышты", "Mystery": "Құпия", "Psychological": "Психологиялық",
+    "Romance": "Романтика", "Sci-Fi": "Ғылыми фантастика", "Slice of Life": "Күнделікті өмір",
+    "Sports": "Спорт", "Supernatural": "Табиғаттан тыс", "Thriller": "Триллер",
+  },
+};
 
 const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdult, onSelect, language, hideLabels }) => {
   const [query, setQuery] = useState('');
@@ -136,9 +153,9 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
     );
   };
 
-  const labels = language === 'en' ? {
+  const genreName = (g: Genre) => language === 'en' ? g : GENRE_NAMES[language][g];
+  const labels = ({ en: {
     placeholder: "Search manga, manhwa...",
-    optimizing: "AI Resolving...",
     genres: "Genres",
     noResults: "No results found",
     clear: "Clear All",
@@ -146,9 +163,8 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
     retry: "Try again",
     cyrillicHint: "AniList searches by English or romaji titles — try e.g. \"Berserk\" or \"Shingeki no Kyojin\".",
     readingAction: "Reading", planAction: "Plan to read", completedAction: "Completed"
-  } : {
+  }, ru: {
     placeholder: "Поиск манги, манхвы...",
-    optimizing: "ИИ ищет...",
     genres: "Жанры",
     noResults: "Ничего не найдено",
     clear: "Сбросить",
@@ -156,7 +172,16 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
     retry: "Повторить",
     cyrillicHint: "AniList ищет по английским или ромадзи-названиям — например «Berserk» или «Shingeki no Kyojin».",
     readingAction: "Читаю", planAction: "В планах", completedAction: "Прочитано"
-  };
+  }, kk: {
+    placeholder: "Манга, манхва іздеу...",
+    genres: "Жанрлар",
+    noResults: "Ештеңе табылмады",
+    clear: "Тазарту",
+    error: "Нәтижелерді жүктеу мүмкін болмады. Интернетті тексеріп, қайталап көріңіз.",
+    retry: "Қайталау",
+    cyrillicHint: "AniList ағылшынша немесе ромадзи атаулары бойынша іздейді — мысалы, «Berserk» немесе «Shingeki no Kyojin».",
+    readingAction: "Оқып жүрмін", planAction: "Жоспарда", completedAction: "Оқып шықтым"
+  } })[language];
   const hasCyrillic = /[а-яё]/i.test(query);
 
   return (
@@ -194,7 +219,7 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
                             : 'bg-slate-900/50 text-slate-500 border-slate-800 hover:text-slate-300 hover:border-slate-700'
                     }`}
                 >
-                  {genre}
+                  {genreName(genre)}
                 </button>
             ))}
             {selectedGenres.length > 0 && (

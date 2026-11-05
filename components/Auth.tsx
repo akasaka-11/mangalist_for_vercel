@@ -21,6 +21,7 @@ import {
   validateRegistration,
   validateResetRequest,
 } from '../lib/auth';
+import { Language } from '../lib/i18n';
 
 export type AuthMode = 'login' | 'register' | 'forgot' | 'recovery';
 
@@ -29,10 +30,10 @@ interface AuthProps {
   onClose: () => void;
   onLogin: (user: User, isNewAccount: boolean) => void;
   onPasswordUpdated: () => void;
-  language: 'en' | 'ru';
+  language: Language;
 }
 
-const errorText: Record<'en' | 'ru', Record<AuthErrorCode, string>> = {
+const errorText: Record<Language, Record<AuthErrorCode, string>> = {
   en: {
     usernameRequired: 'Enter a username',
     usernameLength: `Username must be ${USERNAME_MIN}–${USERNAME_MAX} characters`,
@@ -71,6 +72,25 @@ const errorText: Record<'en' | 'ru', Record<AuthErrorCode, string>> = {
     notConfigured: 'Вход на сайте ещё не настроен (нет ключей Supabase)',
     unknown: 'Что-то пошло не так. Попробуйте ещё раз',
   },
+  kk: {
+    usernameRequired: 'Пайдаланушы атын енгізіңіз',
+    usernameLength: `Аты ${USERNAME_MIN}–${USERNAME_MAX} таңбадан тұруы керек`,
+    usernameChars: 'Тек латын әріптері, сандар және . _ -',
+    emailRequired: 'Email енгізіңіз',
+    emailInvalid: 'Дұрыс email енгізіңіз, мысалы name@example.com',
+    passwordRequired: 'Құпиясөзді енгізіңіз',
+    passwordLength: `Құпиясөз ${PASSWORD_MIN}–${PASSWORD_MAX} таңбадан тұруы керек`,
+    passwordWeak: 'Құпиясөз тым қарапайым: кемінде бір әріп және бір сан болуы керек',
+    passwordMismatch: 'Құпиясөздер сәйкес келмейді',
+    emailTaken: 'Бұл email-мен аккаунт бұрыннан бар',
+    invalidCredentials: 'Email немесе құпиясөз қате',
+    emailNotConfirmed: 'Алдымен email-ді растаңыз — сілтеме поштаңызға жіберілді',
+    rateLimited: 'Әрекет тым көп. Бір минут күтіп, қайталап көріңіз',
+    samePassword: 'Жаңа құпиясөз ескісінен өзгеше болуы керек',
+    network: 'Сервермен байланыс жоқ. Интернетті тексеріп, қайталап көріңіз',
+    notConfigured: 'Сайтта кіру әлі бапталмаған (Supabase кілттері жоқ)',
+    unknown: 'Бірдеңе дұрыс болмады. Қайталап көріңіз',
+  },
 };
 
 const emptyForm = { username: '', email: '', password: '', confirm: '' };
@@ -93,22 +113,29 @@ const Auth: React.FC<AuthProps> = ({ initialMode = 'login', onClose, onLogin, on
   }, [onClose]);
 
   const errors = errorText[language];
-  const en = language === 'en';
-  const titles: Record<AuthMode, [string, string]> = en ? {
+  const allTitles: Record<Language, Record<AuthMode, [string, string]>> = { en: {
     login: ['Sign In', 'Welcome back to your collection'],
     register: ['Create Account', 'Start your manga journey today'],
     forgot: ['Reset Password', "We'll email you a link to set a new password"],
     recovery: ['New Password', 'Choose a new password for your account'],
-  } : {
+  }, ru: {
     login: ['Вход', 'С возвращением в библиотеку'],
     register: ['Регистрация', 'Начните вести свой список манги'],
     forgot: ['Сброс пароля', 'Пришлём ссылку для нового пароля на почту'],
     recovery: ['Новый пароль', 'Придумайте новый пароль для аккаунта'],
-  };
-  const buttons: Record<AuthMode, string> = en
-    ? { login: 'Sign In', register: 'Create Account', forgot: 'Send Link', recovery: 'Save Password' }
-    : { login: 'Войти', register: 'Создать аккаунт', forgot: 'Отправить ссылку', recovery: 'Сохранить пароль' };
-  const labels = en ? {
+  }, kk: {
+    login: ['Кіру', 'Кітапханаңызға қайта оралуыңызбен'],
+    register: ['Тіркелу', 'Манга тізіміңізді жүргізуді бастаңыз'],
+    forgot: ['Құпиясөзді қалпына келтіру', 'Жаңа құпиясөз орнату үшін поштаңызға сілтеме жібереміз'],
+    recovery: ['Жаңа құпиясөз', 'Аккаунтыңызға жаңа құпиясөз ойлап табыңыз'],
+  } };
+  const titles = allTitles[language];
+  const buttons = ({
+    en: { login: 'Sign In', register: 'Create Account', forgot: 'Send Link', recovery: 'Save Password' },
+    ru: { login: 'Войти', register: 'Создать аккаунт', forgot: 'Отправить ссылку', recovery: 'Сохранить пароль' },
+    kk: { login: 'Кіру', register: 'Аккаунт ашу', forgot: 'Сілтеме жіберу', recovery: 'Құпиясөзді сақтау' },
+  } satisfies Record<Language, Record<AuthMode, string>>)[language];
+  const labels = ({ en: {
     user: 'Username',
     mail: 'Email',
     pass: mode === 'recovery' ? 'New Password' : 'Password',
@@ -128,7 +155,7 @@ const Auth: React.FC<AuthProps> = ({ initialMode = 'login', onClose, onLogin, on
     resetSent: 'If an account with {email} exists, we sent a link to reset the password.',
     resend: 'Resend email',
     resentOk: 'Sent again',
-  } : {
+  }, ru: {
     user: 'Имя пользователя',
     mail: 'Email',
     pass: mode === 'recovery' ? 'Новый пароль' : 'Пароль',
@@ -148,7 +175,27 @@ const Auth: React.FC<AuthProps> = ({ initialMode = 'login', onClose, onLogin, on
     resetSent: 'Если аккаунт с адресом {email} существует, мы отправили на него ссылку для сброса пароля.',
     resend: 'Отправить ещё раз',
     resentOk: 'Отправлено повторно',
-  };
+  }, kk: {
+    user: 'Пайдаланушы аты',
+    mail: 'Email',
+    pass: mode === 'recovery' ? 'Жаңа құпиясөз' : 'Құпиясөз',
+    confirm: 'Құпиясөзді қайталаңыз',
+    passHint: `Кемінде ${PASSWORD_MIN} таңба, әріп және сан`,
+    noAccount: 'Аккаунтыңыз жоқ па?',
+    haveAccount: 'Аккаунтыңыз бар ма?',
+    register: 'Тіркелу',
+    signIn: 'Кіру',
+    forgot: 'Құпиясөзді ұмыттыңыз ба?',
+    backToLogin: 'Кіруге оралу',
+    show: 'Құпиясөзді көрсету',
+    hide: 'Құпиясөзді жасыру',
+    close: 'Жабу',
+    checkMail: 'Поштаңызды тексеріңіз',
+    confirmSent: 'Растау сілтемесін {email} адресіне жібердік. Аккаунтты іске қосу үшін сілтемені ашыңыз, содан кейін кіріңіз.',
+    resetSent: 'Егер {email} адресімен аккаунт болса, оған құпиясөзді қалпына келтіру сілтемесін жібердік.',
+    resend: 'Қайта жіберу',
+    resentOk: 'Қайта жіберілді',
+  } })[language];
 
   const update = (field: FormField) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((f) => ({ ...f, [field]: e.target.value }));

@@ -20,7 +20,6 @@ import {
   X,
   User as UserIcon,
   LogOut,
-  Languages,
   Ghost,
   Loader2
 } from 'lucide-react';
@@ -30,6 +29,8 @@ import Dashboard from './components/Dashboard';
 import SearchTitle from './components/SearchTitle';
 import MangaModal from './components/MangaModal';
 import Auth, { AuthMode } from './components/Auth';
+import LanguageSwitcher from './components/LanguageSwitcher';
+import { detectLanguage, isLanguage, Language } from './lib/i18n';
 import { logout, onAuthChange } from './lib/auth';
 import { loadLibrary, saveLibrary } from './lib/library';
 import { readJson, writeJson } from './lib/storage';
@@ -37,7 +38,7 @@ import { clampChapter, needsLatestChapterCheck } from './lib/chapters';
 import { fetchLatestChapter } from './lib/latestChapter';
 import { recordLocalDelete, useLibrarySync } from './hooks/useLibrarySync';
 
-export type Language = 'en' | 'ru';
+export type { Language } from './lib/i18n';
 
 const PREFS_KEY = 'mml.prefs';
 interface Prefs {
@@ -46,29 +47,32 @@ interface Prefs {
   hideLabels: boolean;
 }
 
-const translations = {
+type StatusNames = Record<MangaStatus, string>;
+
+const translations: Record<Language, {
+  library: string; discover: string; nsfwOn: string; sfwOnly: string; statusUpdated: string; moved: string;
+  added: string; removed: string; nsfwVisible: string; safeSearch: string; langChanged: string;
+  hideLabels: string; showLabels: string; explore: string; login: string; logout: string;
+  welcomeUser: string; accountCreated: string; loggedOut: string; statusNames: StatusNames;
+  signInForLibrary: string; signInForLibrarySub: string; spotlight: string; heroText: string;
+  trending: string; trendingText: string; smartProgress: string; smartProgressText: string;
+  privateLibrary: string; privateLibraryText: string; passwordUpdated: string; authLinkError: string;
+  back: string;
+}> = {
   en: {
     library: 'My Library',
     discover: 'Discover',
-    tracking: 'Tracking progress',
-    findNew: 'Find new series',
-    alertsOn: 'Alerts On',
-    alertsOff: 'Alerts Off',
     nsfwOn: 'NSFW ON',
     sfwOnly: 'SFW ONLY',
-    statusUpdated: 'Status updated to',
+    statusUpdated: 'Status updated',
     moved: 'Moved',
     added: 'Added to library',
     removed: 'Removed from library',
-    notifEnabled: 'Notifications enabled',
-    notifDisabled: 'Notifications disabled',
     nsfwVisible: 'NSFW Content Visible',
     safeSearch: 'Safe Search Active',
-    langChanged: 'Language changed to English',
+    langChanged: 'Language: English',
     hideLabels: 'Hide Titles',
     showLabels: 'Show Titles',
-    backToMenu: 'Menu',
-    welcome: 'Welcome Back',
     explore: 'Explore the world of Manga',
     login: 'Login / Register',
     logout: 'Logout',
@@ -85,33 +89,26 @@ const translations = {
     smartProgress: 'Smart Progress',
     smartProgressText: 'One-tap chapter logging with intelligent limits.',
     privateLibrary: 'Personal Library',
-    privateLibraryText: 'Sign in with your account. Your list is kept per account on this device.',
+    privateLibraryText: 'Your list is saved in your account and synced across your devices.',
     passwordUpdated: 'Password updated',
-    authLinkError: 'The link is invalid or has expired. Request a new one.'
+    authLinkError: 'The link is invalid or has expired. Request a new one.',
+    back: 'Back to home'
   },
   ru: {
     library: 'Библиотека',
     discover: 'Поиск',
-    tracking: 'Отслеживание',
-    findNew: 'Новинки',
-    alertsOn: 'Увед. ВКЛ',
-    alertsOff: 'Увед. ВЫКЛ',
     nsfwOn: '18+ ВКЛ',
     sfwOnly: 'БЕЗОПАСНО',
-    statusUpdated: 'Статус изменен на',
+    statusUpdated: 'Статус изменён',
     moved: 'Перемещено',
-    added: 'Добавлено',
-    removed: 'Удалено',
-    notifEnabled: 'Уведомления включены',
-    notifDisabled: 'Уведомления отключены',
+    added: 'Добавлено в библиотеку',
+    removed: 'Удалено из библиотеки',
     nsfwVisible: 'Контент 18+ виден',
     safeSearch: 'Безопасный поиск',
-    langChanged: 'Язык: Русский',
+    langChanged: 'Язык: русский',
     hideLabels: 'Скрыть названия',
     showLabels: 'Показать названия',
-    backToMenu: 'Меню',
-    welcome: 'С возвращением',
-    explore: 'Мир манги ждет',
+    explore: 'Мир манги ждёт',
     login: 'Войти / Регистрация',
     logout: 'Выйти',
     welcomeUser: 'С возвращением, {name}!',
@@ -127,9 +124,45 @@ const translations = {
     smartProgress: 'Умный прогресс',
     smartProgressText: 'Отметка главы в одно нажатие с проверкой лимитов.',
     privateLibrary: 'Личная библиотека',
-    privateLibraryText: 'Входите в свой аккаунт. Список хранится отдельно для каждого аккаунта на этом устройстве.',
+    privateLibraryText: 'Список хранится в вашем аккаунте и синхронизируется между устройствами.',
     passwordUpdated: 'Пароль обновлён',
-    authLinkError: 'Ссылка недействительна или устарела. Запросите новую.'
+    authLinkError: 'Ссылка недействительна или устарела. Запросите новую.',
+    back: 'На главную'
+  },
+  kk: {
+    library: 'Кітапхана',
+    discover: 'Іздеу',
+    nsfwOn: '18+ ҚОСУЛЫ',
+    sfwOnly: 'ҚАУІПСІЗ',
+    statusUpdated: 'Күйі өзгерді',
+    moved: 'Ауыстырылды',
+    added: 'Кітапханаға қосылды',
+    removed: 'Кітапханадан өшірілді',
+    nsfwVisible: '18+ контент көрсетіледі',
+    safeSearch: 'Қауіпсіз іздеу қосулы',
+    langChanged: 'Тіл: қазақша',
+    hideLabels: 'Атауларды жасыру',
+    showLabels: 'Атауларды көрсету',
+    explore: 'Манга әлемі сізді күтуде',
+    login: 'Кіру / Тіркелу',
+    logout: 'Шығу',
+    welcomeUser: 'Қайта оралуыңызбен, {name}!',
+    accountCreated: 'Аккаунт ашылды. Қош келдіңіз, {name}!',
+    loggedOut: 'Аккаунттан шықтыңыз',
+    statusNames: { READING: 'Оқып жүрмін', PLAN_TO_READ: 'Жоспарда', COMPLETED: 'Оқып шықтым', DROPPED: 'Тастадым' },
+    signInForLibrary: 'Өз кітапханаңызды жүргізу үшін кіріңіз',
+    signInForLibrarySub: 'Әр аккаунттың өз тізімі мен прогресі бар.',
+    spotlight: 'Назарда',
+    heroText: 'Оқылған тарауларды белгілеңіз, танымал тайтлдарды табыңыз және прогресіңізді қадағалаңыз.',
+    trending: 'Танымал',
+    trendingText: 'AniList базасындағы танымал тайтлдар.',
+    smartProgress: 'Ақылды прогресс',
+    smartProgressText: 'Тарауды бір басумен белгілеу, шектеулер тексеріледі.',
+    privateLibrary: 'Жеке кітапхана',
+    privateLibraryText: 'Тізіміңіз аккаунтта сақталады және барлық құрылғыларыңызда синхрондалады.',
+    passwordUpdated: 'Құпиясөз жаңартылды',
+    authLinkError: 'Сілтеме жарамсыз немесе ескірген. Жаңасын сұратыңыз.',
+    back: 'Басты бетке'
   }
 };
 
@@ -142,9 +175,7 @@ const App: React.FC = () => {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [prefs] = useState(() => readJson<Partial<Prefs>>(PREFS_KEY, {}));
   const [includeAdult, setIncludeAdult] = useState(prefs.includeAdult === true);
-  const [language, setLanguage] = useState<Language>(
-    prefs.language === 'en' || prefs.language === 'ru' ? prefs.language : navigator.language?.toLowerCase().startsWith('ru') ? 'ru' : 'en'
-  );
+  const [language, setLanguage] = useState<Language>(() => isLanguage(prefs.language) ? prefs.language : detectLanguage());
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
   const [hideLabels, setHideLabels] = useState(prefs.hideLabels === true);
   const [selectedManga, setSelectedManga] = useState<MangaTitle | null>(null);
@@ -243,12 +274,9 @@ const App: React.FC = () => {
     if (window.innerWidth < 1024) setIsSidebarOpen(false);
   };
 
-  const toggleLanguage = () => {
-    setLanguage(prev => {
-      const next = prev === 'en' ? 'ru' : 'en';
-      showToast(translations[next].langChanged);
-      return next;
-    });
+  const changeLanguage = (next: Language) => {
+    setLanguage(next);
+    showToast(translations[next].langChanged);
   };
 
   const toggleNSFW = () => {
@@ -369,9 +397,7 @@ const App: React.FC = () => {
                   </div>
 
                   <div className="absolute top-6 right-6 md:top-12 md:right-12 z-30 flex flex-wrap justify-end gap-3">
-                    <button onClick={toggleLanguage} className="p-3 bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl hover:bg-white/10 text-white transition-all">
-                      <Languages size={18} />
-                    </button>
+                    <LanguageSwitcher value={language} onChange={changeLanguage} variant="glass" />
                     <button
                         onClick={toggleNSFW}
                         className={`flex items-center gap-2 px-4 py-3 rounded-2xl border transition-all text-[10px] font-black uppercase tracking-widest ${
@@ -439,7 +465,7 @@ const App: React.FC = () => {
               <div className="p-4 md:p-10">
                 <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
                   <div className="flex items-center gap-4 md:gap-6 w-full md:w-auto">
-                    <button onClick={() => handleTabChange('home')} className="p-4 bg-slate-900 hover:bg-slate-800 rounded-2xl border border-slate-800 text-slate-400 transition-all"><ArrowLeft size={18} /></button>
+                    <button onClick={() => handleTabChange('home')} aria-label={t.back} title={t.back} className="p-4 bg-slate-900 hover:bg-slate-800 rounded-2xl border border-slate-800 text-slate-400 transition-all"><ArrowLeft size={18} /></button>
                     <h1 className="text-xl md:text-5xl font-black bg-gradient-to-br from-white to-indigo-500 bg-clip-text text-transparent tracking-tighter uppercase truncate">
                       {activeTab === 'dashboard' ? t.library : t.discover}
                     </h1>
@@ -465,9 +491,7 @@ const App: React.FC = () => {
                       <Ghost size={16} /> {includeAdult ? t.nsfwOn : t.sfwOnly}
                     </button>
 
-                    <button onClick={toggleLanguage} className="p-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-2xl text-slate-400 transition-all">
-                      <Languages size={18} />
-                    </button>
+                    <LanguageSwitcher value={language} onChange={changeLanguage} />
                   </div>
                 </header>
 

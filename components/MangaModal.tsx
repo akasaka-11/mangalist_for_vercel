@@ -1,16 +1,17 @@
 
 import React, { useEffect } from 'react';
-import { X, Star, BookOpen, Clock, Calendar, CheckCircle } from 'lucide-react';
+import { X, Star, BookOpen, Clock, CheckCircle } from 'lucide-react';
 import { MangaTitle } from '../types';
+import { Language } from '../lib/i18n';
 
 interface MangaModalProps {
   manga: MangaTitle;
   onClose: () => void;
-  language: 'en' | 'ru';
+  language: Language;
 }
 
 const MangaModal: React.FC<MangaModalProps> = ({ manga, onClose, language }) => {
-  const labels = language === 'en' ? {
+  const labels = ({ en: {
     chapters: 'Chapters released',
     status: 'Publication Status',
     updated: 'Last Updated',
@@ -18,8 +19,9 @@ const MangaModal: React.FC<MangaModalProps> = ({ manga, onClose, language }) => 
     rating: 'Community Rating',
     ongoing: 'Ongoing',
     noDescription: 'No description available.',
-    close: 'Close'
-  } : {
+    close: 'Close',
+    source: 'Source'
+  }, ru: {
     chapters: 'Глав выпущено',
     status: 'Статус публикации',
     updated: 'Обновлено',
@@ -27,8 +29,19 @@ const MangaModal: React.FC<MangaModalProps> = ({ manga, onClose, language }) => 
     rating: 'Рейтинг сообщества',
     ongoing: 'Выходит',
     noDescription: 'Описание отсутствует.',
-    close: 'Закрыть'
-  };
+    close: 'Закрыть',
+    source: 'Источник'
+  }, kk: {
+    chapters: 'Шыққан тараулар',
+    status: 'Шығу күйі',
+    updated: 'Жаңартылды',
+    summary: 'Сюжет сипаттамасы',
+    rating: 'Қауымдастық рейтингі',
+    ongoing: 'Шығып жатыр',
+    noDescription: 'Сипаттама жоқ.',
+    close: 'Жабу',
+    source: 'Дереккөз'
+  } })[language];
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -112,17 +125,8 @@ const MangaModal: React.FC<MangaModalProps> = ({ manga, onClose, language }) => 
                  <CheckCircle size={20} />
                </div>
                <div>
-                 <p className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">Verified Content</p>
-                 <p className="text-[11px] font-bold text-slate-300">AniList Source</p>
-               </div>
-             </div>
-             <div className="flex items-center gap-3">
-               <div className="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-400 border border-purple-500/20">
-                 <Calendar size={20} />
-               </div>
-               <div>
-                 <p className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">Metadata</p>
-                 <p className="text-[11px] font-bold text-slate-300">Release Tracked</p>
+                 <p className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">{labels.source}</p>
+                 <p className="text-[11px] font-bold text-slate-300">AniList</p>
                </div>
              </div>
           </div>
