@@ -21,7 +21,8 @@ import {
   User as UserIcon,
   LogOut,
   Languages,
-  Ghost
+  Ghost,
+  Loader2
 } from 'lucide-react';
 import { MangaStatus, MangaTitle, User } from './types';
 import Sidebar from './components/Sidebar';
@@ -29,8 +30,8 @@ import Dashboard from './components/Dashboard';
 import RoadmapView from './components/RoadmapView';
 import SearchTitle from './components/SearchTitle';
 import MangaModal from './components/MangaModal';
-import Auth from './components/Auth';
-import { getCurrentUser, logout } from './lib/auth';
+import Auth, { AuthMode } from './components/Auth';
+import { logout, onAuthChange } from './lib/auth';
 import { loadLibrary, saveLibrary } from './lib/library';
 import { readJson, writeJson } from './lib/storage';
 
@@ -85,7 +86,9 @@ const translations = {
     smartProgress: 'Smart Progress',
     smartProgressText: 'One-tap chapter logging with intelligent limits.',
     privateLibrary: 'Personal Library',
-    privateLibraryText: 'Every account keeps its own list. For now accounts live only in this browser.'
+    privateLibraryText: 'Sign in with your account. Your list is kept per account on this device.',
+    passwordUpdated: 'Password updated',
+    authLinkError: 'The link is invalid or has expired. Request a new one.'
   },
   ru: {
     library: 'Библиотека',
@@ -128,18 +131,19 @@ const translations = {
     smartProgress: 'Умный прогресс',
     smartProgressText: 'Отметка главы в одно нажатие с проверкой лимитов.',
     privateLibrary: 'Личная библиотека',
-    privateLibraryText: 'У каждого аккаунта свой список. Пока аккаунты хранятся только в этом браузере.'
+    privateLibraryText: 'Входите в свой аккаунт. Список хранится отдельно для каждого аккаунта на этом устройстве.',
+    passwordUpdated: 'Пароль обновлён',
+    authLinkError: 'Ссылка недействительна или устарела. Запросите новую.'
   }
 };
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'search' | 'mentor' | 'home'>('home');
-  const [user, setUser] = useState<User | null>(() => getCurrentUser());
-  const [mangaList, setMangaList] = useState<MangaTitle[]>(() => {
-    const current = getCurrentUser();
-    return current ? loadLibrary(current.id) : [];
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [mangaList, setMangaList] = useState<MangaTitle[]>([]);
   const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [prefs] = useState(() => readJson<Partial<Prefs>>(PREFS_KEY, {}));
   const [includeAdult, setIncludeAdult] = useState(prefs.includeAdult === true);
   const [language, setLanguage] = useState<Language>(
@@ -169,6 +173,42 @@ const App: React.FC = () => {
   }, []);
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
+  // Session comes from Supabase asynchronously (restored from storage, or from
+  // the link in a confirmation / password-reset email).
+  const userIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    return onAuthChange((nextUser, event) => {
+      const nextId = nextUser?.id ?? null;
+      if (nextId !== userIdRef.current) {
+        userIdRef.current = nextId;
+        setUser(nextUser);
+        setMangaList(nextUser ? loadLibrary(nextUser.id) : []);
+      } else if (nextUser) {
+        setUser(nextUser); // e.g. metadata changed
+      }
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthMode('recovery');
+        setShowAuth(true);
+      }
+      setAuthReady(true);
+    });
+  }, []);
+
+  // Expired/invalid email links come back as #error=...&error_code=...
+  useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    if (hash.get('error') || hash.get('error_code')) {
+      showToast(t.authLinkError, 'error');
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openAuth = (mode: AuthMode = 'login') => {
+    setAuthMode(mode);
+    setShowAuth(true);
+  };
+
   const handleTabChange = (tab: 'dashboard' | 'search' | 'mentor' | 'home') => {
     setActiveTab(tab);
     if (window.innerWidth < 1024) setIsSidebarOpen(false);
@@ -191,14 +231,18 @@ const App: React.FC = () => {
   };
 
   const handleLogin = (newUser: User, isNewAccount: boolean) => {
-    setUser(newUser);
-    setMangaList(loadLibrary(newUser.id));
+    if (userIdRef.current !== newUser.id) {
+      userIdRef.current = newUser.id;
+      setUser(newUser);
+      setMangaList(loadLibrary(newUser.id));
+    }
     setShowAuth(false);
     showToast((isNewAccount ? t.accountCreated : t.welcomeUser).replace('{name}', newUser.username));
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
+    userIdRef.current = null;
     setUser(null);
     setMangaList([]);
     setSelectedManga(null);
@@ -207,6 +251,10 @@ const App: React.FC = () => {
   };
 
   const closeAuth = useCallback(() => setShowAuth(false), []);
+  const handlePasswordUpdated = () => {
+    setShowAuth(false);
+    showToast(t.passwordUpdated);
+  };
 
   const updateProgress = (id: string, chapter: number) => {
     setMangaList(prev => prev.map(m => {
@@ -233,7 +281,7 @@ const App: React.FC = () => {
 
   const addOrUpdateTitle = (manga: MangaTitle) => {
     if (!user) {
-      setShowAuth(true);
+      openAuth();
       return;
     }
     setMangaList(prev => {
@@ -312,7 +360,7 @@ const App: React.FC = () => {
                         </button>
                         </>
                     ) : (
-                        <button onClick={() => setShowAuth(true)} className="flex items-center gap-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 shadow-xl shadow-indigo-600/20 rounded-2xl transition-all text-sm font-black uppercase tracking-widest text-white">
+                        <button onClick={() => openAuth()} className="flex items-center gap-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 shadow-xl shadow-indigo-600/20 rounded-2xl transition-all text-sm font-black uppercase tracking-widest text-white">
                           <UserIcon size={16} /> {t.login}
                         </button>
                     )}
@@ -394,12 +442,15 @@ const App: React.FC = () => {
                 </header>
 
                 <div className="relative z-10">
-                  {activeTab === 'dashboard' && !user && (
+                  {activeTab === 'dashboard' && !user && !authReady && (
+                      <div className="flex justify-center py-20"><Loader2 size={32} className="animate-spin text-indigo-500" /></div>
+                  )}
+                  {activeTab === 'dashboard' && !user && authReady && (
                       <div className="max-w-xl mx-auto text-center py-20 space-y-4">
                         <BookOpen size={40} className="mx-auto text-slate-600" />
                         <p className="text-xl font-black text-white">{t.signInForLibrary}</p>
                         <p className="text-slate-500 text-sm">{t.signInForLibrarySub}</p>
-                        <button onClick={() => setShowAuth(true)} className="inline-flex items-center gap-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-2xl text-sm font-black uppercase tracking-widest text-white">
+                        <button onClick={() => openAuth()} className="inline-flex items-center gap-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-2xl text-sm font-black uppercase tracking-widest text-white">
                           <UserIcon size={16} /> {t.login}
                         </button>
                       </div>
@@ -412,7 +463,7 @@ const App: React.FC = () => {
           )}
         </main>
 
-        {showAuth && <Auth onClose={closeAuth} onLogin={handleLogin} language={language} />}
+        {showAuth && <Auth key={authMode} initialMode={authMode} onClose={closeAuth} onLogin={handleLogin} onPasswordUpdated={handlePasswordUpdated} language={language} />}
         {selectedManga && <MangaModal manga={selectedManga} onClose={() => setSelectedManga(null)} language={language} />}
       </div>
   );

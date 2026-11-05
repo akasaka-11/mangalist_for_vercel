@@ -1,40 +1,19 @@
-// Local (browser-only) accounts.
-//
-// IMPORTANT: there is no server yet, so this is NOT real security. Accounts live
-// in this browser's localStorage: anyone with access to the device/DevTools can
-// read or edit them, and accounts do not exist on other devices. What it does
-// guarantee: you can only sign in with an account that was registered here and
-// with the correct password, and the password itself is never stored — only a
-// salted PBKDF2 hash. Replace with a real auth backend (e.g. Supabase Auth)
-// before storing anything that matters.
+// Authentication via Supabase Auth (email + password).
+// Validation helpers are pure; the rest talks to Supabase and maps its errors
+// to our own codes so the UI can show translated messages.
 
+import type { AuthError as SupabaseAuthError, Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { User } from '../types';
-import { readJson, removeKey, writeJson } from './storage';
-
-const USERS_KEY = 'mml.users';
-const SESSION_KEY = 'mml.session';
-const LEGACY_USER_KEY = 'user';
-
-const PBKDF2_ITERATIONS = 210_000;
+import { removeKey } from './storage';
+import { supabase } from './supabase';
 
 export const USERNAME_MIN = 3;
 export const USERNAME_MAX = 20;
 export const PASSWORD_MIN = 8;
-export const PASSWORD_MAX = 128;
+export const PASSWORD_MAX = 72; // bcrypt (used by Supabase) ignores bytes beyond 72
 
-interface StoredUser {
-  id: string;
-  username: string;
-  email: string;
-  passwordHash: string; // hex
-  salt: string; // hex
-  iterations: number;
-  createdAt: string;
-}
-
-interface Session {
-  userId: string;
-}
+// Keys used by the previous browser-only implementation; cleaned up on start.
+const LEGACY_KEYS = ['user', 'mml.users', 'mml.session'];
 
 export type AuthErrorCode =
   | 'usernameRequired'
@@ -46,16 +25,20 @@ export type AuthErrorCode =
   | 'passwordLength'
   | 'passwordWeak'
   | 'passwordMismatch'
-  | 'identifierRequired'
-  | 'usernameTaken'
   | 'emailTaken'
   | 'invalidCredentials'
-  | 'cryptoUnavailable';
+  | 'emailNotConfirmed'
+  | 'rateLimited'
+  | 'samePassword'
+  | 'network'
+  | 'notConfigured'
+  | 'unknown';
 
-export type FieldErrors = Partial<Record<'username' | 'email' | 'password' | 'confirm' | 'identifier', AuthErrorCode>>;
+export type FormField = 'username' | 'email' | 'password' | 'confirm';
+export type FieldErrors = Partial<Record<FormField, AuthErrorCode>>;
 
 export class AuthError extends Error {
-  constructor(public code: AuthErrorCode, public field?: keyof FieldErrors) {
+  constructor(public code: AuthErrorCode, public field?: FormField) {
     super(code);
   }
 }
@@ -63,7 +46,6 @@ export class AuthError extends Error {
 // ---------- validation (pure) ----------
 
 const USERNAME_RE = /^[A-Za-z0-9_.-]+$/;
-// Pragmatic email check: something@something.tld, no spaces.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function validateUsername(value: string): AuthErrorCode | undefined {
@@ -83,9 +65,16 @@ export function validateEmail(value: string): AuthErrorCode | undefined {
 
 export function validatePassword(value: string): AuthErrorCode | undefined {
   if (!value) return 'passwordRequired';
-  if (value.length < PASSWORD_MIN || value.length > PASSWORD_MAX) return 'passwordLength';
+  if (value.length < PASSWORD_MIN || new TextEncoder().encode(value).length > PASSWORD_MAX) return 'passwordLength';
   if (!/[A-Za-zА-Яа-яЁё]/.test(value) || !/\d/.test(value)) return 'passwordWeak';
   return undefined;
+}
+
+function validateNewPassword(password: string, confirm: string): FieldErrors {
+  const p = validatePassword(password);
+  if (p) return { password: p };
+  if (password !== confirm) return { confirm: 'passwordMismatch' };
+  return {};
 }
 
 export interface RegisterInput {
@@ -101,138 +90,161 @@ export function validateRegistration(input: RegisterInput): FieldErrors {
   if (u) errors.username = u;
   const e = validateEmail(input.email);
   if (e) errors.email = e;
-  const p = validatePassword(input.password);
-  if (p) errors.password = p;
-  else if (input.password !== input.confirm) errors.confirm = 'passwordMismatch';
-  return errors;
+  return { ...errors, ...validateNewPassword(input.password, input.confirm) };
 }
 
 export interface LoginInput {
-  identifier: string; // username or email
+  email: string;
   password: string;
 }
 
 export function validateLogin(input: LoginInput): FieldErrors {
   const errors: FieldErrors = {};
-  if (!input.identifier.trim()) errors.identifier = 'identifierRequired';
+  const e = validateEmail(input.email);
+  if (e) errors.email = e;
   if (!input.password) errors.password = 'passwordRequired';
   return errors;
 }
 
-// ---------- crypto ----------
-
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+export function validateResetRequest(email: string): FieldErrors {
+  const e = validateEmail(email);
+  return e ? { email: e } : {};
 }
 
-function fromHex(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return out;
+export function validatePasswordUpdate(password: string, confirm: string): FieldErrors {
+  return validateNewPassword(password, confirm);
 }
 
-function getSubtle(): SubtleCrypto {
-  // crypto.subtle exists only in secure contexts (https or localhost).
-  if (!globalThis.crypto?.subtle) throw new AuthError('cryptoUnavailable');
-  return globalThis.crypto.subtle;
+function throwFirst(errors: FieldErrors): void {
+  const field = Object.keys(errors)[0] as FormField | undefined;
+  if (field) throw new AuthError(errors[field]!, field);
 }
 
-async function hashPassword(password: string, salt: Uint8Array, iterations: number): Promise<string> {
-  const subtle = getSubtle();
-  const key = await subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt: salt as BufferSource, iterations },
-    key,
-    256,
-  );
-  return toHex(new Uint8Array(bits));
+// ---------- Supabase ----------
+
+function client() {
+  if (!supabase) throw new AuthError('notConfigured');
+  return supabase;
 }
 
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
+export const isAuthConfigured = () => supabase !== null;
 
-// ---------- storage ----------
-
-function loadUsers(): StoredUser[] {
-  const users = readJson<unknown>(USERS_KEY, []);
-  return Array.isArray(users) ? (users as StoredUser[]) : [];
-}
-
-function toPublicUser(u: StoredUser): User {
-  return { id: u.id, username: u.username, email: u.email };
-}
-
-function startSession(userId: string): void {
-  writeJson(SESSION_KEY, { userId } satisfies Session);
-}
-
-/** Returns the signed-in user, or null if the session is missing or points to a deleted account. */
-export function getCurrentUser(): User | null {
-  // The old app stored a fake user object under "user" — never trust it.
-  removeKey(LEGACY_USER_KEY);
-  const session = readJson<Session | null>(SESSION_KEY, null);
-  if (!session?.userId) return null;
-  const user = loadUsers().find((u) => u.id === session.userId);
-  if (!user) {
-    removeKey(SESSION_KEY);
-    return null;
+function mapError(error: SupabaseAuthError): AuthError {
+  switch (error.code) {
+    case 'invalid_credentials':
+      return new AuthError('invalidCredentials');
+    case 'email_not_confirmed':
+      return new AuthError('emailNotConfirmed');
+    case 'user_already_exists':
+    case 'email_exists':
+      return new AuthError('emailTaken', 'email');
+    case 'weak_password':
+      return new AuthError('passwordWeak', 'password');
+    case 'same_password':
+      return new AuthError('samePassword', 'password');
+    case 'email_address_invalid':
+      return new AuthError('emailInvalid', 'email');
+    case 'over_email_send_rate_limit':
+    case 'over_request_rate_limit':
+      return new AuthError('rateLimited');
   }
-  return toPublicUser(user);
+  if (error.status === 429) return new AuthError('rateLimited');
+  if (!error.status || error.name === 'AuthRetryableFetchError') return new AuthError('network');
+  console.error('Unhandled Supabase auth error', error);
+  return new AuthError('unknown');
 }
 
-export async function register(input: RegisterInput): Promise<User> {
-  const errors = validateRegistration(input);
-  const firstField = Object.keys(errors)[0] as keyof FieldErrors | undefined;
-  if (firstField) throw new AuthError(errors[firstField]!, firstField);
-
-  const username = input.username.trim();
-  const email = input.email.trim().toLowerCase();
-  const users = loadUsers();
-  if (users.some((u) => u.username.toLowerCase() === username.toLowerCase())) {
-    throw new AuthError('usernameTaken', 'username');
-  }
-  if (users.some((u) => u.email === email)) {
-    throw new AuthError('emailTaken', 'email');
-  }
-
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const passwordHash = await hashPassword(input.password, salt, PBKDF2_ITERATIONS);
-  const stored: StoredUser = {
-    id: crypto.randomUUID(),
-    username,
+export function toAppUser(user: SupabaseUser): User {
+  const meta = user.user_metadata as { username?: unknown } | undefined;
+  const email = user.email ?? '';
+  return {
+    id: user.id,
     email,
-    passwordHash,
-    salt: toHex(salt),
-    iterations: PBKDF2_ITERATIONS,
-    createdAt: new Date().toISOString(),
+    username: typeof meta?.username === 'string' && meta.username ? meta.username : email.split('@')[0],
   };
-  writeJson(USERS_KEY, [...users, stored]);
-  startSession(stored.id);
-  return toPublicUser(stored);
+}
+
+/** Subscribes to sign-in/sign-out. The callback fires once right away with the restored session (or null). */
+export function onAuthChange(
+  callback: (user: User | null, event: 'INITIAL' | 'SIGNED_IN' | 'SIGNED_OUT' | 'PASSWORD_RECOVERY' | 'OTHER') => void,
+): () => void {
+  LEGACY_KEYS.forEach(removeKey);
+  if (!supabase) {
+    callback(null, 'INITIAL');
+    return () => {};
+  }
+  const { data } = supabase.auth.onAuthStateChange((event, session: Session | null) => {
+    const user = session?.user ? toAppUser(session.user) : null;
+    const mapped =
+      event === 'INITIAL_SESSION' ? 'INITIAL'
+      : event === 'SIGNED_IN' ? 'SIGNED_IN'
+      : event === 'SIGNED_OUT' ? 'SIGNED_OUT'
+      : event === 'PASSWORD_RECOVERY' ? 'PASSWORD_RECOVERY'
+      : 'OTHER';
+    // Supabase recommends not awaiting other Supabase calls inside this
+    // callback; defer so React state updates happen outside it.
+    setTimeout(() => callback(user, mapped), 0);
+  });
+  return () => data.subscription.unsubscribe();
+}
+
+export type RegisterResult = { user: User; needsEmailConfirmation: false } | { user: null; needsEmailConfirmation: true };
+
+export async function register(input: RegisterInput): Promise<RegisterResult> {
+  throwFirst(validateRegistration(input));
+  const { data, error } = await client().auth.signUp({
+    email: input.email.trim(),
+    password: input.password,
+    options: {
+      data: { username: input.username.trim() },
+      emailRedirectTo: window.location.origin,
+    },
+  });
+  if (error) throw mapError(error);
+  // With "Confirm email" enabled Supabase returns no session until the link in
+  // the email is clicked (and, to avoid leaking which emails exist, it answers
+  // the same way for an already registered email).
+  if (!data.session || !data.user) return { user: null, needsEmailConfirmation: true };
+  return { user: toAppUser(data.user), needsEmailConfirmation: false };
 }
 
 export async function login(input: LoginInput): Promise<User> {
-  const errors = validateLogin(input);
-  const firstField = Object.keys(errors)[0] as keyof FieldErrors | undefined;
-  if (firstField) throw new AuthError(errors[firstField]!, firstField);
-
-  const id = input.identifier.trim().toLowerCase();
-  const user = loadUsers().find((u) => u.username.toLowerCase() === id || u.email === id);
-  // Hash even when the user is unknown so both cases take similar time, and
-  // return the same generic error so we don't reveal which accounts exist.
-  const salt = user ? fromHex(user.salt) : new Uint8Array(16);
-  const hash = await hashPassword(input.password, salt, user?.iterations ?? PBKDF2_ITERATIONS);
-  if (!user || !safeEqual(hash, user.passwordHash)) {
-    throw new AuthError('invalidCredentials');
-  }
-  startSession(user.id);
-  return toPublicUser(user);
+  throwFirst(validateLogin(input));
+  const { data, error } = await client().auth.signInWithPassword({
+    email: input.email.trim(),
+    password: input.password,
+  });
+  if (error) throw mapError(error);
+  return toAppUser(data.user);
 }
 
-export function logout(): void {
-  removeKey(SESSION_KEY);
+export async function requestPasswordReset(email: string): Promise<void> {
+  throwFirst(validateResetRequest(email));
+  const { error } = await client().auth.resetPasswordForEmail(email.trim(), {
+    redirectTo: window.location.origin,
+  });
+  if (error) throw mapError(error);
+}
+
+export async function updatePassword(password: string, confirm: string): Promise<void> {
+  throwFirst(validatePasswordUpdate(password, confirm));
+  const { error } = await client().auth.updateUser({ password });
+  if (error) throw mapError(error);
+}
+
+export async function resendConfirmation(email: string): Promise<void> {
+  throwFirst(validateResetRequest(email));
+  const { error } = await client().auth.resend({
+    type: 'signup',
+    email: email.trim(),
+    options: { emailRedirectTo: window.location.origin },
+  });
+  if (error) throw mapError(error);
+}
+
+export async function logout(): Promise<void> {
+  if (!supabase) return;
+  // 'local' signs out this browser even if the network request fails.
+  const { error } = await supabase.auth.signOut({ scope: 'local' });
+  if (error) console.error('Sign-out error', error);
 }
