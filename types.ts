@@ -37,5 +37,7 @@ export interface MangaTitle {
   latestChapterUrl?: string;
   /** Epoch ms of the last successful lookup. */
   latestChapterCheckedAt?: number;
+  /** Epoch ms of the last change made by the user; used to merge devices (last write wins). */
+  updatedAt?: number;
 }
 

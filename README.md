@@ -35,9 +35,20 @@ Setup:
 The anon key is public by design; never put the `service_role` key in the frontend.
 Supabase's built-in email sender is heavily rate-limited — configure custom SMTP before launch.
 
-The manga library itself is still kept in the browser's localStorage, separately for each
-account (`lib/library.ts`); it does not sync between devices yet. A library saved by the old
-version of the app is handed to the first account that signs in on that browser.
+## Library sync
+
+The library is stored in the Supabase table `public.library_entries` with Row Level Security
+(each user can read and change only their own rows). Create it once: open **SQL Editor** in
+Supabase, paste `supabase/migrations/20261106000000_library_entries.sql` and run it.
+
+How it works (`hooks/useLibrarySync.ts`, merge rules in `lib/librarySync.ts`):
+- the list is also cached in localStorage per account, so it shows instantly and works offline;
+- on sign-in, when the tab becomes active again, and when the network returns, the server copy
+  is pulled and merged — the newer change of an entry wins;
+- local changes are uploaded about a second after they happen; deletions made offline are
+  remembered and sent later.
+
+Without the table the app keeps working with the local list and shows that sync is not set up.
 
 ## Environment variables
 

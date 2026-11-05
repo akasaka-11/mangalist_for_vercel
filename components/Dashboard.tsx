@@ -2,7 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { MangaTitle, MangaStatus } from '../types';
 import { CHAPTER_MARGIN, chapterLimit, NO_LIMIT } from '../lib/chapters';
-import { Plus, Minus, BookOpen, CheckCircle, XCircle, Trash2, Star, Clock, Search, ChevronDown } from 'lucide-react';
+import { Plus, Minus, BookOpen, CheckCircle, XCircle, Trash2, Star, Clock, Search, ChevronDown, Cloud, CloudOff, RefreshCw, AlertTriangle } from 'lucide-react';
+import type { SyncState } from '../hooks/useLibrarySync';
 
 interface DashboardProps {
   mangaList: MangaTitle[];
@@ -11,6 +12,7 @@ interface DashboardProps {
   onRemove: (id: string) => void;
   onSelect: (manga: MangaTitle) => void;
   onDiscover: () => void;
+  syncState: SyncState;
   language: 'en' | 'ru';
   hideLabels?: boolean;
 }
@@ -60,7 +62,7 @@ const ChapterInput: React.FC<{ value: number; max: number; label: string; onComm
   );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, updateStatus, onRemove, onSelect, onDiscover, language, hideLabels }) => {
+const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, updateStatus, onRemove, onSelect, onDiscover, syncState, language, hideLabels }) => {
   const [filter, setFilter] = useState<MangaStatus | 'ALL'>('ALL');
 
   const labels: Labels = language === 'en' ? {
@@ -80,6 +82,31 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
     emptyTitle: 'Библиотека пуста', emptySub: 'Найдите тайтл в поиске и добавьте его в список.',
     emptyFilter: 'Пока нет тайтлов с этим статусом', discover: 'Поиск', confirmRemove: 'Удалить «{title}» из библиотеки?'
   };
+
+  const syncText: Record<Exclude<SyncState, 'disabled'>, string> = language === 'en' ? {
+    syncing: 'Syncing…',
+    synced: 'Synced with your account',
+    offline: 'Offline — changes are saved on this device and will sync later',
+    notSetUp: 'Sync is not set up yet — the list is stored on this device only',
+    error: "Couldn't sync — will retry automatically",
+  } : {
+    syncing: 'Синхронизация…',
+    synced: 'Синхронизировано с аккаунтом',
+    offline: 'Нет сети — изменения сохранены на устройстве и синхронизируются позже',
+    notSetUp: 'Синхронизация ещё не настроена — список хранится только на этом устройстве',
+    error: 'Не удалось синхронизировать — повторим автоматически',
+  };
+  const syncIndicator = syncState === 'disabled' ? null : (
+      <p role="status" className={`flex items-center gap-2 text-xs ${
+          syncState === 'synced' ? 'text-slate-500' : syncState === 'syncing' ? 'text-slate-400' : 'text-amber-400'
+      }`}>
+        {syncState === 'synced' && <Cloud size={14} />}
+        {syncState === 'syncing' && <RefreshCw size={14} className="animate-spin" />}
+        {syncState === 'offline' && <CloudOff size={14} />}
+        {(syncState === 'notSetUp' || syncState === 'error') && <AlertTriangle size={14} />}
+        {syncText[syncState]}
+      </p>
+  );
 
   const statusLabel: Record<MangaStatus, string> = {
     [MangaStatus.READING]: labels.reading,
@@ -107,12 +134,17 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
     if (window.confirm(labels.confirmRemove.replace('{title}', getDisplayTitle(m)))) onRemove(m.id);
   };
 
+  if (mangaList.length === 0 && syncState === 'syncing') {
+    return <div className="flex justify-center py-20">{syncIndicator}</div>;
+  }
+
   if (mangaList.length === 0) {
     return (
         <div className="max-w-xl mx-auto text-center py-20 space-y-4">
           <BookOpen size={40} className="mx-auto text-slate-600" />
           <p className="text-xl font-black text-white">{labels.emptyTitle}</p>
           <p className="text-slate-500 text-sm">{labels.emptySub}</p>
+          {syncState === 'syncing' || syncState === 'synced' ? null : <div className="flex justify-center">{syncIndicator}</div>}
           <button onClick={onDiscover} className="inline-flex items-center gap-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-2xl text-sm font-black uppercase tracking-widest text-white">
             <Search size={16} /> {labels.discover}
           </button>
@@ -142,6 +174,7 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
 
   return (
       <div className="space-y-6 max-w-7xl mx-auto">
+        {syncIndicator}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
           {filterButton('ALL', labels.all, mangaList.length)}
           {STATUS_ORDER.map(status =>

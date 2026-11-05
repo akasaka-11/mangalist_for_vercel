@@ -35,6 +35,7 @@ import { loadLibrary, saveLibrary } from './lib/library';
 import { readJson, writeJson } from './lib/storage';
 import { clampChapter, needsLatestChapterCheck } from './lib/chapters';
 import { fetchLatestChapter } from './lib/latestChapter';
+import { recordLocalDelete, useLibrarySync } from './hooks/useLibrarySync';
 
 export type Language = 'en' | 'ru';
 
@@ -154,6 +155,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (user) saveLibrary(user.id, mangaList);
   }, [user, mangaList]);
+
+  const syncState = useLibrarySync(user, mangaList, setMangaList);
 
   // Ongoing series have no chapter count on AniList: look up the latest
   // released chapter (via /api/latest-chapter) one title at a time, at most
@@ -285,7 +288,8 @@ const App: React.FC = () => {
   const updateProgress = (id: string, chapter: number) => {
     setMangaList(prev => prev.map(m => {
       if (m.id === id) {
-        return { ...m, currentChapter: clampChapter(m, chapter) };
+        const currentChapter = clampChapter(m, chapter);
+        return currentChapter === m.currentChapter ? m : { ...m, currentChapter, updatedAt: Date.now() };
       }
       return m;
     }));
@@ -295,7 +299,7 @@ const App: React.FC = () => {
     setMangaList(prev => prev.map(m => {
       if (m.id === id) {
         const newChapter = status === MangaStatus.COMPLETED && m.totalChapters > 0 ? m.totalChapters : m.currentChapter;
-        return { ...m, status, currentChapter: newChapter };
+        return { ...m, status, currentChapter: newChapter, updatedAt: Date.now() };
       }
       return m;
     }));
@@ -311,14 +315,15 @@ const App: React.FC = () => {
       const exists = prev.find(m => m.id === manga.id);
       if (exists) {
         showToast(`${t.moved}: ${manga.title}`);
-        return prev.map(m => m.id === manga.id ? { ...m, status: manga.status } : m);
+        return prev.map(m => m.id === manga.id ? { ...m, status: manga.status, updatedAt: Date.now() } : m);
       }
       showToast(`${t.added}: ${manga.title}`);
-      return [...prev, manga];
+      return [...prev, { ...manga, updatedAt: Date.now() }];
     });
   };
 
   const removeFromLibrary = (id: string) => {
+    if (user) recordLocalDelete(user.id, id);
     setMangaList(prev => prev.filter(m => m.id !== id));
     showToast(t.removed, "error");
   };
@@ -478,7 +483,7 @@ const App: React.FC = () => {
                         </button>
                       </div>
                   )}
-                  {activeTab === 'dashboard' && user && <Dashboard mangaList={mangaList} updateProgress={updateProgress} updateStatus={updateStatus} onRemove={removeFromLibrary} onSelect={setSelectedManga} onDiscover={() => handleTabChange('search')} language={language} hideLabels={hideLabels} />}
+                  {activeTab === 'dashboard' && user && <Dashboard mangaList={mangaList} updateProgress={updateProgress} updateStatus={updateStatus} onRemove={removeFromLibrary} onSelect={setSelectedManga} onDiscover={() => handleTabChange('search')} syncState={syncState} language={language} hideLabels={hideLabels} />}
                   {activeTab === 'search' && <SearchTitle onAdd={addOrUpdateTitle} mangaList={mangaList} includeAdult={includeAdult} onSelect={setSelectedManga} language={language} hideLabels={hideLabels} />}
                 </div>
               </div>
