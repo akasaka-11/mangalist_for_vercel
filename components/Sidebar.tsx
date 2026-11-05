@@ -54,28 +54,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, t, isOpen, o
           </button>
         ))}
       </nav>
-
-      <div className="mt-auto space-y-6 pt-6 border-t border-slate-900">
-        <div className="p-5 bg-slate-900/30 rounded-3xl border border-white/5">
-          <p className="text-[10px] text-indigo-400 font-black uppercase tracking-[0.2em] mb-3">System Health</p>
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-tighter">
-                <span>V1.5 Stable</span>
-                <span className="text-indigo-400">92%</span>
-              </div>
-              <div className="w-full bg-slate-800/50 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-indigo-500 h-full w-[92%] rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)]"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-3 px-2">
-           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-           <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Live Services Active</span>
-        </div>
-      </div>
     </aside>
   );
 };
