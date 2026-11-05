@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MangaTitle, MangaStatus } from '../types';
-import { Plus, Minus, BookOpen, CheckCircle, XCircle, Trash2, Star, Clock, Search } from 'lucide-react';
+import { Plus, Minus, BookOpen, CheckCircle, XCircle, Trash2, Star, Clock, Search, ChevronDown } from 'lucide-react';
 
 interface DashboardProps {
   mangaList: MangaTitle[];
@@ -14,19 +14,73 @@ interface DashboardProps {
   hideLabels?: boolean;
 }
 
+type Labels = {
+  [K in 'reading' | 'finished' | 'plan' | 'dropped' | 'all' | 'remove' | 'ch' | 'ongoing' | 'chapterInput' | 'prevChapter'
+    | 'nextChapter' | 'status' | 'emptyTitle' | 'emptySub' | 'emptyFilter' | 'discover' | 'confirmRemove']: string;
+};
+
+const STATUS_ORDER = [MangaStatus.READING, MangaStatus.PLAN_TO_READ, MangaStatus.COMPLETED, MangaStatus.DROPPED];
+
+const STATUS_STYLE: Record<MangaStatus, { icon: React.ReactNode; badge: string; bar: string; active: string }> = {
+  [MangaStatus.READING]: { icon: <BookOpen size={12} />, badge: 'bg-emerald-500 text-white', bar: 'bg-emerald-500', active: 'bg-emerald-600 text-white' },
+  [MangaStatus.PLAN_TO_READ]: { icon: <Clock size={12} />, badge: 'bg-amber-500 text-slate-950', bar: 'bg-amber-500', active: 'bg-amber-500 text-slate-950' },
+  [MangaStatus.COMPLETED]: { icon: <CheckCircle size={12} />, badge: 'bg-indigo-500 text-white', bar: 'bg-indigo-500', active: 'bg-indigo-600 text-white' },
+  [MangaStatus.DROPPED]: { icon: <XCircle size={12} />, badge: 'bg-rose-500 text-white', bar: 'bg-rose-500', active: 'bg-rose-600 text-white' },
+};
+
+/** Chapter field that can be cleared while typing; the value is applied on blur or Enter. */
+const ChapterInput: React.FC<{ value: number; max: number; label: string; onCommit: (n: number) => void }> = ({ value, max, label, onCommit }) => {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+
+  const commit = () => {
+    const n = parseInt(text, 10);
+    if (Number.isNaN(n)) {
+      setText(String(value));
+      return;
+    }
+    const clamped = Math.min(Math.max(n, 0), max);
+    setText(String(clamped));
+    if (clamped !== value) onCommit(clamped);
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      aria-label={label}
+      value={text}
+      onChange={(e) => setText(e.target.value.replace(/\D/g, '').slice(0, String(max).length || 5))}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+      onFocus={(e) => e.target.select()}
+      className="w-9 sm:w-12 bg-transparent text-center text-sm sm:text-base font-bold text-white rounded-md focus:outline-none focus:bg-slate-800 tabular-nums"
+    />
+  );
+};
+
 const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, updateStatus, onRemove, onSelect, onDiscover, language, hideLabels }) => {
   const [filter, setFilter] = useState<MangaStatus | 'ALL'>('ALL');
 
-  const labels = language === 'en' ? {
-    reading: 'Reading', finished: 'Done', plan: 'Plan', dropped: 'Dropped', all: 'All Titles',
-    remove: 'Remove', progress: 'Progress', ch: 'Ch.', of: '/', ongoing: 'Ongoing',
+  const labels: Labels = language === 'en' ? {
+    reading: 'Reading', finished: 'Completed', plan: 'Plan to read', dropped: 'Dropped', all: 'All',
+    remove: 'Remove from library', ch: 'Ch.', ongoing: 'Ongoing', chapterInput: 'Current chapter',
+    prevChapter: 'Previous chapter', nextChapter: 'Next chapter', status: 'Status',
     emptyTitle: 'Your library is empty', emptySub: 'Find a series in Discover and add it to your list.',
     emptyFilter: 'No titles with this status yet', discover: 'Discover', confirmRemove: 'Remove "{title}" from your library?'
   } : {
-    reading: 'Читаю', finished: 'Прочитано', plan: 'Буду', dropped: 'Брошено', all: 'Весь список',
-    remove: 'Удалить', progress: 'Прогресс', ch: 'Гл.', of: '/', ongoing: 'Выходит',
+    reading: 'Читаю', finished: 'Прочитано', plan: 'В планах', dropped: 'Брошено', all: 'Все',
+    remove: 'Удалить из библиотеки', ch: 'Гл.', ongoing: 'Выходит', chapterInput: 'Текущая глава',
+    prevChapter: 'Предыдущая глава', nextChapter: 'Следующая глава', status: 'Статус',
     emptyTitle: 'Библиотека пуста', emptySub: 'Найдите тайтл в поиске и добавьте его в список.',
     emptyFilter: 'Пока нет тайтлов с этим статусом', discover: 'Поиск', confirmRemove: 'Удалить «{title}» из библиотеки?'
+  };
+
+  const statusLabel: Record<MangaStatus, string> = {
+    [MangaStatus.READING]: labels.reading,
+    [MangaStatus.PLAN_TO_READ]: labels.plan,
+    [MangaStatus.COMPLETED]: labels.finished,
+    [MangaStatus.DROPPED]: labels.dropped,
   };
 
   const getDisplayTitle = (m: MangaTitle) => {
@@ -34,28 +88,15 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
     return m.titles.english || m.titles.romaji || m.title;
   };
 
-  const getStatusConfig = (status: MangaStatus) => {
-    switch(status) {
-      case MangaStatus.READING: return { color: 'bg-emerald-500', icon: <BookOpen size={14} />, label: labels.reading, glow: 'shadow-emerald-500/20' };
-      case MangaStatus.COMPLETED: return { color: 'bg-indigo-500', icon: <CheckCircle size={14} />, label: labels.finished, glow: 'shadow-indigo-500/20' };
-      case MangaStatus.PLAN_TO_READ: return { color: 'bg-amber-500', icon: <Clock size={14} />, label: labels.plan, glow: 'shadow-amber-500/20' };
-      case MangaStatus.DROPPED: return { color: 'bg-rose-500', icon: <XCircle size={14} />, label: labels.dropped, glow: 'shadow-rose-500/20' };
-    }
-  };
-
   const handleIncrement = (m: MangaTitle) => {
     const nextChapter = m.currentChapter + 1;
     if (m.totalChapters > 0 && nextChapter >= m.totalChapters) {
-      updateProgress(m.id, m.totalChapters);
-      if (m.status !== MangaStatus.COMPLETED) {
-        updateStatus(m.id, MangaStatus.COMPLETED);
-      }
+      if (m.status !== MangaStatus.COMPLETED) updateStatus(m.id, MangaStatus.COMPLETED);
+      else updateProgress(m.id, m.totalChapters);
     } else {
       updateProgress(m.id, nextChapter);
     }
   };
-
-  const filteredList = filter === 'ALL' ? mangaList : mangaList.filter(m => m.status === filter);
 
   const handleRemove = (m: MangaTitle) => {
     if (window.confirm(labels.confirmRemove.replace('{title}', getDisplayTitle(m)))) onRemove(m.id);
@@ -74,149 +115,153 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
     );
   }
 
+  const filteredList = filter === 'ALL' ? mangaList : mangaList.filter(m => m.status === filter);
+
+  const filterButton = (value: MangaStatus | 'ALL', text: string, count: number, icon?: React.ReactNode) => {
+    const isActive = filter === value;
+    const activeClass = value === 'ALL' ? 'bg-white text-slate-950' : STATUS_STYLE[value].active;
+    return (
+        <button
+            key={value}
+            onClick={() => setFilter(value)}
+            aria-pressed={isActive}
+            className={`shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
+                isActive ? activeClass : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+            }`}
+        >
+          {icon} {text}
+          <span className={`text-xs tabular-nums ${isActive ? 'opacity-80' : 'text-slate-500'}`}>{count}</span>
+        </button>
+    );
+  };
+
   return (
-      <div className="space-y-8 max-w-7xl mx-auto">
-        <div className="flex items-center gap-2 p-1.5 md:p-2 bg-slate-900/50 backdrop-blur-xl rounded-2xl md:rounded-[2rem] border border-slate-800/50 shadow-2xl overflow-x-auto no-scrollbar">
-          <button
-              onClick={() => setFilter('ALL')}
-              className={`flex-shrink-0 px-4 md:px-6 py-2.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all ${
-                  filter === 'ALL' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-              }`}
-          >
-            {labels.all} ({mangaList.length})
-          </button>
-          {Object.values(MangaStatus).map((status) => {
-            const config = getStatusConfig(status);
-            const count = mangaList.filter(m => m.status === status).length;
-            return (
-                <button
-                    key={status}
-                    onClick={() => setFilter(status)}
-                    className={`flex-shrink-0 flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all ${
-                        filter === status ? `${config.color} text-white shadow-xl ${config.glow}` : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                    }`}
-                >
-                  {config.icon} {config.label} ({count})
-                </button>
-            );
-          })}
+      <div className="space-y-6 max-w-7xl mx-auto">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+          {filterButton('ALL', labels.all, mangaList.length)}
+          {STATUS_ORDER.map(status =>
+              filterButton(status, statusLabel[status], mangaList.filter(m => m.status === status).length, STATUS_STYLE[status].icon)
+          )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-8">
-          {filteredList.map((manga) => {
-            const config = getStatusConfig(manga.status);
-            const displayTitle = getDisplayTitle(manga);
-            const isOngoing = manga.totalChapters === 0 || !manga.totalChapters;
-            const progressPercent = manga.totalChapters ? (manga.currentChapter / manga.totalChapters) * 100 : 100;
-            const isAtMax = manga.totalChapters > 0 && manga.currentChapter >= manga.totalChapters;
+        {filteredList.length === 0 ? (
+            <p className="text-center py-16 text-slate-500 font-semibold">{labels.emptyFilter}</p>
+        ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-5">
+              {filteredList.map((manga) => {
+                const style = STATUS_STYLE[manga.status];
+                const displayTitle = getDisplayTitle(manga);
+                const hasTotal = manga.totalChapters > 0;
+                const progressPercent = hasTotal ? Math.min(100, (manga.currentChapter / manga.totalChapters) * 100) : 0;
+                const isAtMax = hasTotal && manga.currentChapter >= manga.totalChapters;
 
-            return (
-                <div key={manga.id} className="group relative bg-slate-900 rounded-2xl md:rounded-[2.5rem] overflow-hidden border border-slate-800/50 hover:border-indigo-500/40 transition-all duration-500 shadow-2xl aspect-[2/3.3] sm:aspect-[2/3.2]">
-                  <img
-                      src={manga.coverImage}
-                      alt={displayTitle}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 cursor-pointer"
-                      onClick={() => onSelect({...manga, title: displayTitle})}
-                  />
-
-                  {/* Overlay with Title for Zen Mode */}
-                  {hideLabels && (
-                      <div className="absolute inset-0 flex items-center justify-center p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20">
-                        <div className="bg-slate-950/90 backdrop-blur-xl p-4 rounded-2xl border border-white/10 shadow-2xl scale-90 group-hover:scale-100 transition-transform duration-500 text-center">
-                          <h3 className="text-[10px] font-black text-white uppercase tracking-tight leading-tight">{displayTitle}</h3>
-                          <div className="mt-2 flex items-center justify-center gap-1 text-[8px] font-black text-amber-400">
-                            <Star size={8} className="fill-amber-400" /> {manga.rating}
-                          </div>
-                        </div>
-                      </div>
-                  )}
-
-                  <div className="absolute top-2 left-2 right-2 flex justify-between items-start opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-300 z-10">
-                    <div className={`${config.color} px-2 py-1 rounded-lg text-[6px] md:text-[7px] font-black text-white shadow-2xl flex items-center gap-1 uppercase tracking-wider border border-white/10`}>
-                      {config.icon}
-                    </div>
-                    <button onClick={() => handleRemove(manga)} aria-label={labels.remove} title={labels.remove} className="p-1.5 bg-rose-600/80 backdrop-blur-md text-white rounded-lg hover:bg-rose-500 shadow-xl border border-white/10 pointer-events-auto transition-transform active:scale-90">
-                      <Trash2 size={10} className="md:size-[12px]" />
-                    </button>
-                  </div>
-
-                  {/* Bottom UI - Hidden in Zen Mode unless hovered */}
-                  <div className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent p-3 pt-8 flex flex-col justify-end items-start transition-all duration-500 ${hideLabels ? 'opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0' : 'opacity-100'}`}>
-                    <div className="w-full space-y-2 pointer-events-auto">
-                      <div className="space-y-0.5">
-                        <h3 className="text-[9px] md:text-[10px] font-black text-white leading-[1.2] line-clamp-1 md:line-clamp-2 drop-shadow-lg uppercase tracking-tight cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => onSelect({...manga, title: displayTitle})}>
-                          {displayTitle}
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-0.5 text-[7px] md:text-[8px] font-black text-amber-400">
-                            <Star size={8} className="fill-amber-400" /> {manga.rating}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="bg-slate-950/90 border border-white/5 rounded-xl p-0.5 md:p-1 flex items-center justify-between shadow-2xl">
+                return (
+                    <article key={manga.id} className="group flex flex-col bg-slate-900 rounded-2xl border border-slate-800 hover:border-slate-700 overflow-hidden transition-colors">
+                      {/* Cover */}
+                      <div className="relative aspect-[2/3] bg-slate-800">
                         <button
-                            onClick={() => updateProgress(manga.id, manga.currentChapter - 1)}
-                            disabled={manga.currentChapter <= 0}
-                            className="w-6 h-6 md:w-8 md:h-8 flex items-center justify-center bg-white/5 hover:bg-white/10 text-slate-400 rounded-lg transition-all active:scale-90 disabled:opacity-10"
+                            type="button"
+                            onClick={() => onSelect({ ...manga, title: displayTitle })}
+                            className="absolute inset-0 w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                            aria-label={displayTitle}
                         >
-                          <Minus size={10} className="md:size-[14px]" />
+                          <img src={manga.coverImage} alt="" loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
                         </button>
 
-                        <div className="flex flex-col items-center flex-1">
-                          <div className="flex items-center gap-0.5 md:gap-1">
-                            <input
-                                type="number"
-                                min="0"
-                                max={manga.totalChapters > 0 ? manga.totalChapters : 9999}
-                                value={manga.currentChapter}
-                                onChange={(e) => updateProgress(manga.id, parseInt(e.target.value) || 0)}
-                                className="w-7 md:w-10 bg-transparent text-center text-[10px] md:text-[12px] font-black text-white focus:outline-none focus:text-indigo-400 transition-colors p-0"
-                            />
-                            <span className="text-[7px] md:text-[8px] font-bold text-slate-600">{labels.of}</span>
-                            <span className={`text-[8px] md:text-[10px] font-black ${isOngoing ? 'text-emerald-500/70 italic' : 'text-slate-500'}`}>
-                           {isOngoing ? labels.ongoing : manga.totalChapters}
-                         </span>
-                          </div>
-                        </div>
+                        <span className={`absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold shadow-lg pointer-events-none ${style.badge}`}>
+                          {style.icon} {statusLabel[manga.status]}
+                        </span>
 
                         <button
-                            onClick={() => handleIncrement(manga)}
-                            disabled={isAtMax}
-                            className={`w-6 h-6 md:w-8 md:h-8 flex items-center justify-center rounded-lg transition-all active:scale-90 shadow-lg ${isAtMax ? 'bg-indigo-500/10 text-indigo-500/30' : config.color + ' text-white hover:brightness-110'}`}
+                            type="button"
+                            onClick={() => handleRemove(manga)}
+                            aria-label={labels.remove}
+                            title={labels.remove}
+                            className="absolute top-2 right-2 p-2 rounded-full bg-slate-950/70 backdrop-blur text-slate-300 hover:bg-rose-600 hover:text-white transition-all md:opacity-0 md:group-hover:opacity-100 focus:opacity-100"
                         >
-                          {isAtMax ? <CheckCircle size={10} className="md:size-[14px]" /> : <Plus size={10} className="md:size-[14px]" />}
+                          <Trash2 size={14} />
                         </button>
+
+                        {hasTotal && (
+                            <div className="absolute inset-x-0 bottom-0 h-1 bg-slate-950/60">
+                              <div className={`h-full ${style.bar} transition-all duration-500`} style={{ width: `${progressPercent}%` }} />
+                            </div>
+                        )}
                       </div>
 
-                      {!isOngoing && (
-                          <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden shadow-inner border border-white/5">
-                            <div className={`${config.color} h-full transition-all duration-700 ease-out shadow-[0_0_8px_rgba(0,0,0,0.3)]`} style={{ width: `${Math.min(100, progressPercent)}%` }} />
-                          </div>
-                      )}
+                      {/* Info + controls */}
+                      <div className="flex flex-col gap-3 p-3 flex-1">
+                        {!hideLabels && (
+                            <div className="space-y-1 min-h-[3.25rem]">
+                              <h3
+                                  className="text-sm font-semibold text-white leading-snug line-clamp-2 cursor-pointer hover:text-indigo-300"
+                                  title={displayTitle}
+                                  onClick={() => onSelect({ ...manga, title: displayTitle })}
+                              >
+                                {displayTitle}
+                              </h3>
+                              <div className="flex items-center gap-2 text-xs text-slate-400">
+                                {manga.rating !== 'N/A' && (
+                                    <span className="inline-flex items-center gap-1 text-amber-400 font-semibold">
+                                      <Star size={12} className="fill-amber-400" /> {manga.rating}
+                                    </span>
+                                )}
+                                {!hasTotal && <span className="text-emerald-400/80">{labels.ongoing}</span>}
+                              </div>
+                            </div>
+                        )}
 
-                      <div className="flex justify-between items-center">
-                        <div className="flex gap-1 p-0.5 bg-black/40 rounded-lg border border-white/5">
-                          {[
-                            { s: MangaStatus.READING, icon: <BookOpen size={8} />, bg: 'bg-emerald-600' },
-                            { s: MangaStatus.PLAN_TO_READ, icon: <Clock size={8} />, bg: 'bg-amber-600' },
-                            { s: MangaStatus.COMPLETED, icon: <CheckCircle size={8} />, bg: 'bg-indigo-600' },
-                            { s: MangaStatus.DROPPED, icon: <XCircle size={8} />, bg: 'bg-rose-600' },
-                          ].map((btn) => (
-                              <button key={btn.s} onClick={() => updateStatus(manga.id, btn.s)} title={getStatusConfig(btn.s).label} aria-label={getStatusConfig(btn.s).label} className={`p-1 md:p-1.5 rounded-md transition-all ${manga.status === btn.s ? 'bg-white/20 scale-110' : btn.bg + ' opacity-20 hover:opacity-100'}`}>
-                                {btn.icon}
-                              </button>
-                          ))}
+                        <div className="mt-auto space-y-2">
+                          <div className="flex items-center justify-between gap-0.5 bg-slate-950 rounded-xl p-1 border border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => updateProgress(manga.id, manga.currentChapter - 1)}
+                                disabled={manga.currentChapter <= 0}
+                                aria-label={labels.prevChapter}
+                                className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent"
+                            >
+                              <Minus size={16} />
+                            </button>
+
+                            <div className="flex flex-1 items-baseline justify-center min-w-0 whitespace-nowrap text-slate-500 text-xs">
+                              <span className="hidden sm:inline mr-0.5">{labels.ch}</span>
+                              <ChapterInput
+                                  value={manga.currentChapter}
+                                  max={hasTotal ? manga.totalChapters : 99999}
+                                  label={labels.chapterInput}
+                                  onCommit={(n) => updateProgress(manga.id, n)}
+                              />
+                              <span className="tabular-nums">/ {hasTotal ? manga.totalChapters : '?'}</span>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => handleIncrement(manga)}
+                                disabled={isAtMax}
+                                aria-label={labels.nextChapter}
+                                className={`w-8 h-8 sm:w-9 sm:h-9 shrink-0 flex items-center justify-center rounded-lg transition-colors disabled:opacity-30 ${style.active} hover:brightness-110`}
+                            >
+                              <Plus size={16} />
+                            </button>
+                          </div>
+
+                          <label className="relative block">
+                            <span className="sr-only">{labels.status}</span>
+                            <select
+                                value={manga.status}
+                                onChange={(e) => updateStatus(manga.id, e.target.value as MangaStatus)}
+                                className="w-full appearance-none bg-slate-950 border border-slate-800 rounded-xl py-2 pl-3 pr-8 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer [color-scheme:dark]"
+                            >
+                              {STATUS_ORDER.map(s => <option key={s} value={s}>{statusLabel[s]}</option>)}
+                            </select>
+                            <ChevronDown size={16} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                          </label>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
-            );
-          })}
-        </div>
-        {filteredList.length === 0 && (
-            <p className="text-center py-16 text-slate-500 font-black uppercase tracking-widest text-sm">{labels.emptyFilter}</p>
+                    </article>
+                );
+              })}
+            </div>
         )}
       </div>
   );
