@@ -360,11 +360,13 @@ const App: React.FC = () => {
               <div className="min-h-full flex flex-col">
                 <div className="relative min-h-[70vh] md:min-h-[85vh] w-full overflow-hidden flex flex-col justify-end">
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent z-10" />
-                  <img
-                      src="https://images.unsplash.com/photo-1614583225154-5feaba1bd5dd?q=80&w=2000&auto=format&fit=crop"
-                      className="absolute inset-0 w-full h-full object-cover scale-105 animate-pulse-slow brightness-[0.6]"
-                      alt="hero"
-                  />
+                  {/* Decorative background drawn with CSS (the old external photo disappeared and left a broken image). */}
+                  <div aria-hidden="true" className="absolute inset-0 overflow-hidden">
+                    <div className="absolute -top-1/4 -left-1/4 w-[70vw] h-[70vw] rounded-full bg-indigo-600/30 blur-[120px] animate-pulse-slow" />
+                    <div className="absolute top-0 right-[-15%] w-[55vw] h-[55vw] rounded-full bg-purple-600/25 blur-[120px] animate-pulse-slow" />
+                    <div className="absolute bottom-[-20%] left-1/3 w-[45vw] h-[45vw] rounded-full bg-sky-500/10 blur-[100px]" />
+                    <div className="absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:48px_48px]" />
+                  </div>
 
                   <div className="absolute top-6 right-6 md:top-12 md:right-12 z-30 flex flex-wrap justify-end gap-3">
                     <button onClick={toggleLanguage} className="p-3 bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl hover:bg-white/10 text-white transition-all">
@@ -398,7 +400,7 @@ const App: React.FC = () => {
                     <div className="flex items-center gap-2 text-indigo-400 font-black uppercase tracking-[0.4em] text-[10px] md:text-[11px]">
                       <Sparkles size={18} /> {t.spotlight}
                     </div>
-                    <h1 className="text-5xl md:text-9xl font-black text-white uppercase tracking-tighter leading-[0.85] italic">
+                    <h1 className="text-5xl sm:text-7xl xl:text-9xl font-black text-white uppercase tracking-tighter leading-[0.85] italic">
                       MYMANGA<br/>LIST
                     </h1>
                     <p className="text-slate-300 text-sm md:text-xl font-medium max-w-xl leading-relaxed opacity-90 drop-shadow-lg">
