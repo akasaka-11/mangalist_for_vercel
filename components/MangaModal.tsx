@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, Star, BookOpen, Clock, Calendar, CheckCircle } from 'lucide-react';
 import { MangaTitle } from '../types';
 
@@ -15,17 +15,29 @@ const MangaModal: React.FC<MangaModalProps> = ({ manga, onClose, language }) => 
     status: 'Publication Status',
     updated: 'Last Updated',
     summary: 'Story Summary',
-    rating: 'Community Rating'
+    rating: 'Community Rating',
+    ongoing: 'Ongoing',
+    noDescription: 'No description available.',
+    close: 'Close'
   } : {
     chapters: 'Глав выпущено',
     status: 'Статус публикации',
     updated: 'Обновлено',
     summary: 'Описание сюжета',
-    rating: 'Рейтинг сообщества'
+    rating: 'Рейтинг сообщества',
+    ongoing: 'Выходит',
+    noDescription: 'Описание отсутствует.',
+    close: 'Закрыть'
   };
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 md:p-10">
+    <div role="dialog" aria-modal="true" aria-label={manga.title} className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 md:p-10">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-slate-950/80 backdrop-blur-2xl animate-in fade-in duration-300" 
@@ -77,7 +89,7 @@ const MangaModal: React.FC<MangaModalProps> = ({ manga, onClose, language }) => 
           <div className="grid grid-cols-2 gap-4">
              <div className="p-5 bg-slate-950/40 rounded-[2rem] border border-white/5 space-y-1">
                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{labels.chapters}</p>
-               <p className="text-xl font-bold text-indigo-400">{manga.totalChapters || 'Ongoing'}</p>
+               <p className="text-xl font-bold text-indigo-400">{manga.totalChapters || labels.ongoing}</p>
              </div>
              <div className="p-5 bg-slate-950/40 rounded-[2rem] border border-white/5 space-y-1">
                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{labels.updated}</p>
@@ -90,7 +102,7 @@ const MangaModal: React.FC<MangaModalProps> = ({ manga, onClose, language }) => 
               <BookOpen size={16} className="text-indigo-500" /> {labels.summary}
             </h4>
             <div className="text-sm md:text-base text-slate-400 leading-relaxed font-medium bg-slate-950/30 p-6 rounded-[2.5rem] border border-white/5">
-              {manga.description || 'No description available.'}
+              {manga.description && manga.description !== '...' ? manga.description : labels.noDescription}
             </div>
           </div>
 

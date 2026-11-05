@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Loader2, Star, BookOpen, Clock, CheckCircle, Ghost, Filter, X } from 'lucide-react';
+import { Search, Loader2, Star, BookOpen, Clock, CheckCircle, Ghost, Filter, X, AlertTriangle, RotateCw } from 'lucide-react';
 import { MangaTitle, MangaStatus } from '../types';
-import { GoogleGenAI } from "@google/genai";
 
 interface SearchTitleProps {
   onAdd: (manga: MangaTitle) => void;
@@ -21,13 +20,16 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
   const [results, setResults] = useState<MangaTitle[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [optimizingQuery, setOptimizingQuery] = useState(false);
   const [page, setPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(true);
+  const [error, setError] = useState(false);
+  // Every request gets an id; responses from older requests are ignored so a
+  // slow previous search can't overwrite (or append to) the current results.
+  const requestId = useRef(0);
 
   const observer = useRef<IntersectionObserver | null>(null);
   const lastElementRef = useCallback((node: HTMLDivElement | null) => {
-    if (loading || loadingMore) return;
+    if (loading || loadingMore || error) return;
     if (observer.current) observer.current.disconnect();
     observer.current = new IntersectionObserver(entries => {
       if (entries[0].isIntersecting && hasNextPage) {
@@ -37,32 +39,13 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
     if (node) observer.current.observe(node);
   }, [loading, loadingMore, hasNextPage]);
 
-  const getOptimizedQuery = async (input: string) => {
-    const isRussian = /[а-яА-ЯёЁ]/.test(input);
-    if (!isRussian || input.length < 3) return input;
-    setOptimizingQuery(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Manga search: "${input}". Return ONLY the official English or Romaji title. No quotes.`,
-      });
-      return response.text?.trim().replace(/"/g, '') || input;
-    } catch (err) {
-      return input;
-    } finally {
-      setOptimizingQuery(false);
-    }
-  };
-
   const fetchManga = async (search: string, pageNum: number, isNewSearch: boolean) => {
+    const myRequest = ++requestId.current;
     if (isNewSearch) setLoading(true);
     else setLoadingMore(true);
+    setError(false);
 
-    let finalSearchQuery = search;
-    if (isNewSearch && search.trim().length > 0) {
-      finalSearchQuery = await getOptimizedQuery(search);
-    }
+    const finalSearchQuery = search.trim();
 
     const gqlQuery = `
       query ($search: String, $page: Int, $perPage: Int, $isAdult: Boolean, $genres: [String]) {
@@ -96,7 +79,8 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
         body: JSON.stringify({ query: gqlQuery, variables }),
       });
       const json = await response.json();
-      if (!json.data) throw new Error("API Error");
+      if (myRequest !== requestId.current) return;
+      if (!response.ok || !json.data) throw new Error(`AniList error: ${response.status}`);
 
       const pageInfo = json.data.Page.pageInfo;
       setHasNextPage(pageInfo.hasNextPage);
@@ -117,11 +101,21 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
 
       setResults(prev => isNewSearch ? mapped : [...prev, ...mapped]);
     } catch (err) {
+      if (myRequest !== requestId.current) return;
       console.error(err);
+      setError(true);
+      if (isNewSearch) setResults([]);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (myRequest === requestId.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
+  };
+
+  const retry = () => {
+    if (results.length > 0 && page > 1) fetchManga(query, page, false);
+    else fetchManga(query, 1, true);
   };
 
   useEffect(() => {
@@ -147,14 +141,23 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
     optimizing: "AI Resolving...",
     genres: "Genres",
     noResults: "No results found",
-    clear: "Clear All"
+    clear: "Clear All",
+    error: "Couldn't load results. Check your connection and try again.",
+    retry: "Try again",
+    cyrillicHint: "AniList searches by English or romaji titles — try e.g. \"Berserk\" or \"Shingeki no Kyojin\".",
+    readingAction: "Reading", planAction: "Plan to read", completedAction: "Completed"
   } : {
     placeholder: "Поиск манги, манхвы...",
     optimizing: "ИИ ищет...",
     genres: "Жанры",
     noResults: "Ничего не найдено",
-    clear: "Сбросить"
+    clear: "Сбросить",
+    error: "Не удалось загрузить результаты. Проверьте интернет и попробуйте снова.",
+    retry: "Повторить",
+    cyrillicHint: "AniList ищет по английским или ромадзи-названиям — например «Berserk» или «Shingeki no Kyojin».",
+    readingAction: "Читаю", planAction: "В планах", completedAction: "Прочитано"
   };
+  const hasCyrillic = /[а-яё]/i.test(query);
 
   return (
       <div className="space-y-8 max-w-7xl mx-auto pb-20">
@@ -163,11 +166,12 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
             <div className="absolute inset-0 bg-indigo-500/10 blur-3xl rounded-full"></div>
             <div className="relative flex items-center">
               <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500">
-                {loading || optimizingQuery ? <Loader2 size={24} className="animate-spin text-indigo-500" /> : <Search size={24} />}
+                {loading ? <Loader2 size={24} className="animate-spin text-indigo-500" /> : <Search size={24} />}
               </div>
               <input
                   type="text"
-                  placeholder={optimizingQuery ? labels.optimizing : labels.placeholder}
+                  placeholder={labels.placeholder}
+                  aria-label={labels.placeholder}
                   className="w-full bg-slate-900/90 backdrop-blur-2xl border border-slate-800 rounded-[2.5rem] py-6 pl-16 pr-8 outline-none text-slate-100 shadow-2xl focus:border-indigo-500/50 transition-all text-lg"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
@@ -244,18 +248,21 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
                     <h4 className="text-[10px] font-black text-white uppercase truncate mb-3">{manga.title}</h4>
                     <div className="flex gap-1.5">
                       <button
+                          title={labels.readingAction} aria-label={labels.readingAction}
                           onClick={() => onAdd({...manga, status: MangaStatus.READING})}
                           className={`flex-1 p-2.5 rounded-xl transition-all flex items-center justify-center ${inLibrary?.status === MangaStatus.READING ? 'bg-emerald-500 text-white' : 'bg-slate-800/80 text-slate-300 hover:bg-emerald-600 hover:text-white'}`}
                       >
                         <BookOpen size={14} />
                       </button>
                       <button
+                          title={labels.planAction} aria-label={labels.planAction}
                           onClick={() => onAdd({...manga, status: MangaStatus.PLAN_TO_READ})}
                           className={`flex-1 p-2.5 rounded-xl transition-all flex items-center justify-center ${inLibrary?.status === MangaStatus.PLAN_TO_READ ? 'bg-amber-500 text-white' : 'bg-slate-800/80 text-slate-300 hover:bg-amber-600 hover:text-white'}`}
                       >
                         <Clock size={14} />
                       </button>
                       <button
+                          title={labels.completedAction} aria-label={labels.completedAction}
                           onClick={() => onAdd({...manga, status: MangaStatus.COMPLETED})}
                           className={`flex-1 p-2.5 rounded-xl transition-all flex items-center justify-center ${inLibrary?.status === MangaStatus.COMPLETED ? 'bg-indigo-500 text-white' : 'bg-slate-800/80 text-slate-300 hover:bg-indigo-600 hover:text-white'}`}
                       >
@@ -268,9 +275,20 @@ const SearchTitle: React.FC<SearchTitleProps> = ({ onAdd, mangaList, includeAdul
           })}
         </div>
 
-        {results.length === 0 && !loading && (
-            <div className="text-center py-20">
+        {error && (
+            <div role="alert" className="max-w-xl mx-auto text-center py-12 space-y-4">
+              <AlertTriangle size={32} className="mx-auto text-rose-400" />
+              <p className="text-slate-300 font-semibold">{labels.error}</p>
+              <button onClick={retry} className="inline-flex items-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 rounded-2xl text-xs font-black uppercase tracking-widest text-white">
+                <RotateCw size={14} /> {labels.retry}
+              </button>
+            </div>
+        )}
+
+        {results.length === 0 && !loading && !error && (
+            <div className="text-center py-20 space-y-3">
               <p className="text-slate-500 font-black uppercase tracking-widest text-sm">{labels.noResults}</p>
+              {hasCyrillic && <p className="text-slate-500 text-sm max-w-md mx-auto">{labels.cyrillicHint}</p>}
             </div>
         )}
 

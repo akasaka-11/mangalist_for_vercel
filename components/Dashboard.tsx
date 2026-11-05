@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { MangaTitle, MangaStatus } from '../types';
-import { Plus, Minus, BookOpen, CheckCircle, XCircle, Trash2, Star, Clock, ChevronRight } from 'lucide-react';
+import { Plus, Minus, BookOpen, CheckCircle, XCircle, Trash2, Star, Clock, Search } from 'lucide-react';
 
 interface DashboardProps {
   mangaList: MangaTitle[];
@@ -9,19 +9,24 @@ interface DashboardProps {
   updateStatus: (id: string, status: MangaStatus) => void;
   onRemove: (id: string) => void;
   onSelect: (manga: MangaTitle) => void;
+  onDiscover: () => void;
   language: 'en' | 'ru';
   hideLabels?: boolean;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, updateStatus, onRemove, onSelect, language, hideLabels }) => {
+const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, updateStatus, onRemove, onSelect, onDiscover, language, hideLabels }) => {
   const [filter, setFilter] = useState<MangaStatus | 'ALL'>('ALL');
 
   const labels = language === 'en' ? {
     reading: 'Reading', finished: 'Done', plan: 'Plan', dropped: 'Dropped', all: 'All Titles',
-    remove: 'Remove', progress: 'Progress', ch: 'Ch.', of: '/', ongoing: 'Ongoing'
+    remove: 'Remove', progress: 'Progress', ch: 'Ch.', of: '/', ongoing: 'Ongoing',
+    emptyTitle: 'Your library is empty', emptySub: 'Find a series in Discover and add it to your list.',
+    emptyFilter: 'No titles with this status yet', discover: 'Discover', confirmRemove: 'Remove "{title}" from your library?'
   } : {
     reading: 'Читаю', finished: 'Прочитано', plan: 'Буду', dropped: 'Брошено', all: 'Весь список',
-    remove: 'Удалить', progress: 'Прогресс', ch: 'Гл.', of: '/', ongoing: 'Выходит'
+    remove: 'Удалить', progress: 'Прогресс', ch: 'Гл.', of: '/', ongoing: 'Выходит',
+    emptyTitle: 'Библиотека пуста', emptySub: 'Найдите тайтл в поиске и добавьте его в список.',
+    emptyFilter: 'Пока нет тайтлов с этим статусом', discover: 'Поиск', confirmRemove: 'Удалить «{title}» из библиотеки?'
   };
 
   const getDisplayTitle = (m: MangaTitle) => {
@@ -51,6 +56,23 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
   };
 
   const filteredList = filter === 'ALL' ? mangaList : mangaList.filter(m => m.status === filter);
+
+  const handleRemove = (m: MangaTitle) => {
+    if (window.confirm(labels.confirmRemove.replace('{title}', getDisplayTitle(m)))) onRemove(m.id);
+  };
+
+  if (mangaList.length === 0) {
+    return (
+        <div className="max-w-xl mx-auto text-center py-20 space-y-4">
+          <BookOpen size={40} className="mx-auto text-slate-600" />
+          <p className="text-xl font-black text-white">{labels.emptyTitle}</p>
+          <p className="text-slate-500 text-sm">{labels.emptySub}</p>
+          <button onClick={onDiscover} className="inline-flex items-center gap-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-2xl text-sm font-black uppercase tracking-widest text-white">
+            <Search size={16} /> {labels.discover}
+          </button>
+        </div>
+    );
+  }
 
   return (
       <div className="space-y-8 max-w-7xl mx-auto">
@@ -113,7 +135,7 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
                     <div className={`${config.color} px-2 py-1 rounded-lg text-[6px] md:text-[7px] font-black text-white shadow-2xl flex items-center gap-1 uppercase tracking-wider border border-white/10`}>
                       {config.icon}
                     </div>
-                    <button onClick={() => onRemove(manga.id)} className="p-1.5 bg-rose-600/80 backdrop-blur-md text-white rounded-lg hover:bg-rose-500 shadow-xl border border-white/10 pointer-events-auto transition-transform active:scale-90">
+                    <button onClick={() => handleRemove(manga)} aria-label={labels.remove} title={labels.remove} className="p-1.5 bg-rose-600/80 backdrop-blur-md text-white rounded-lg hover:bg-rose-500 shadow-xl border border-white/10 pointer-events-auto transition-transform active:scale-90">
                       <Trash2 size={10} className="md:size-[12px]" />
                     </button>
                   </div>
@@ -179,8 +201,9 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
                             { s: MangaStatus.READING, icon: <BookOpen size={8} />, bg: 'bg-emerald-600' },
                             { s: MangaStatus.PLAN_TO_READ, icon: <Clock size={8} />, bg: 'bg-amber-600' },
                             { s: MangaStatus.COMPLETED, icon: <CheckCircle size={8} />, bg: 'bg-indigo-600' },
+                            { s: MangaStatus.DROPPED, icon: <XCircle size={8} />, bg: 'bg-rose-600' },
                           ].map((btn) => (
-                              <button key={btn.s} onClick={() => updateStatus(manga.id, btn.s)} className={`p-1 md:p-1.5 rounded-md transition-all ${manga.status === btn.s ? 'bg-white/20 scale-110' : btn.bg + ' opacity-20 hover:opacity-100'}`}>
+                              <button key={btn.s} onClick={() => updateStatus(manga.id, btn.s)} title={getStatusConfig(btn.s).label} aria-label={getStatusConfig(btn.s).label} className={`p-1 md:p-1.5 rounded-md transition-all ${manga.status === btn.s ? 'bg-white/20 scale-110' : btn.bg + ' opacity-20 hover:opacity-100'}`}>
                                 {btn.icon}
                               </button>
                           ))}
@@ -192,6 +215,9 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
             );
           })}
         </div>
+        {filteredList.length === 0 && (
+            <p className="text-center py-16 text-slate-500 font-black uppercase tracking-widest text-sm">{labels.emptyFilter}</p>
+        )}
       </div>
   );
 };

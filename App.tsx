@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Bell,
   BellOff,
@@ -30,8 +30,18 @@ import RoadmapView from './components/RoadmapView';
 import SearchTitle from './components/SearchTitle';
 import MangaModal from './components/MangaModal';
 import Auth from './components/Auth';
+import { getCurrentUser, logout } from './lib/auth';
+import { loadLibrary, saveLibrary } from './lib/library';
+import { readJson, writeJson } from './lib/storage';
 
 export type Language = 'en' | 'ru';
+
+const PREFS_KEY = 'mml.prefs';
+interface Prefs {
+  language: Language;
+  includeAdult: boolean;
+  hideLabels: boolean;
+}
 
 const translations = {
   en: {
@@ -61,7 +71,21 @@ const translations = {
     welcome: 'Welcome Back',
     explore: 'Explore the world of Manga',
     login: 'Login / Register',
-    logout: 'Logout'
+    logout: 'Logout',
+    welcomeUser: 'Welcome back, {name}!',
+    accountCreated: 'Account created. Welcome, {name}!',
+    loggedOut: 'You have been logged out',
+    statusNames: { READING: 'Reading', PLAN_TO_READ: 'Plan to read', COMPLETED: 'Completed', DROPPED: 'Dropped' },
+    signInForLibrary: 'Sign in to keep your own library',
+    signInForLibrarySub: 'Each account has its own list of titles and progress.',
+    spotlight: 'Spotlight',
+    heroText: 'Track your reading history, find the latest hits, and manage your progress in style.',
+    trending: 'Trending',
+    trendingText: 'Popular titles from the AniList database.',
+    smartProgress: 'Smart Progress',
+    smartProgressText: 'One-tap chapter logging with intelligent limits.',
+    privateLibrary: 'Personal Library',
+    privateLibraryText: 'Every account keeps its own list. For now accounts live only in this browser.'
   },
   ru: {
     library: 'Библиотека',
@@ -90,47 +114,60 @@ const translations = {
     welcome: 'С возвращением',
     explore: 'Мир манги ждет',
     login: 'Войти / Регистрация',
-    logout: 'Выйти'
+    logout: 'Выйти',
+    welcomeUser: 'С возвращением, {name}!',
+    accountCreated: 'Аккаунт создан. Добро пожаловать, {name}!',
+    loggedOut: 'Вы вышли из аккаунта',
+    statusNames: { READING: 'Читаю', PLAN_TO_READ: 'В планах', COMPLETED: 'Прочитано', DROPPED: 'Брошено' },
+    signInForLibrary: 'Войдите, чтобы вести свою библиотеку',
+    signInForLibrarySub: 'У каждого аккаунта свой список тайтлов и прогресс.',
+    spotlight: 'В центре внимания',
+    heroText: 'Отмечайте прочитанные главы, находите популярные тайтлы и следите за прогрессом.',
+    trending: 'Популярное',
+    trendingText: 'Популярные тайтлы из базы AniList.',
+    smartProgress: 'Умный прогресс',
+    smartProgressText: 'Отметка главы в одно нажатие с проверкой лимитов.',
+    privateLibrary: 'Личная библиотека',
+    privateLibraryText: 'У каждого аккаунта свой список. Пока аккаунты хранятся только в этом браузере.'
   }
 };
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'search' | 'mentor' | 'home'>('home');
-  const [mangaList, setMangaList] = useState<MangaTitle[]>([]);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => getCurrentUser());
+  const [mangaList, setMangaList] = useState<MangaTitle[]>(() => {
+    const current = getCurrentUser();
+    return current ? loadLibrary(current.id) : [];
+  });
   const [showAuth, setShowAuth] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [includeAdult, setIncludeAdult] = useState(false);
-  const [language, setLanguage] = useState<Language>('en');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
-  const [hideLabels, setHideLabels] = useState(false);
+  const [prefs] = useState(() => readJson<Partial<Prefs>>(PREFS_KEY, {}));
+  const [includeAdult, setIncludeAdult] = useState(prefs.includeAdult === true);
+  const [language, setLanguage] = useState<Language>(
+    prefs.language === 'en' || prefs.language === 'ru' ? prefs.language : navigator.language?.toLowerCase().startsWith('ru') ? 'ru' : 'en'
+  );
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
+  const [hideLabels, setHideLabels] = useState(prefs.hideLabels === true);
   const [selectedManga, setSelectedManga] = useState<MangaTitle | null>(null);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
 
   const t = useMemo(() => translations[language], [language]);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('manga-list');
-      if (saved) setMangaList(JSON.parse(saved));
-
-      const savedUser = localStorage.getItem('user');
-      if (savedUser) {
-        setUser(JSON.parse(savedUser));
-      }
-    } catch (e) {
-      console.error("Failed to restore state:", e);
-    }
-  }, []);
+    if (user) saveLibrary(user.id, mangaList);
+  }, [user, mangaList]);
 
   useEffect(() => {
-    localStorage.setItem('manga-list', JSON.stringify(mangaList));
-  }, [mangaList]);
+    writeJson(PREFS_KEY, { language, includeAdult, hideLabels } satisfies Prefs);
+    document.documentElement.lang = language;
+  }, [language, includeAdult, hideLabels]);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  }, []);
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
   const handleTabChange = (tab: 'dashboard' | 'search' | 'mentor' | 'home') => {
     setActiveTab(tab);
@@ -153,18 +190,23 @@ const App: React.FC = () => {
     });
   };
 
-  const handleLogin = (newUser: User) => {
+  const handleLogin = (newUser: User, isNewAccount: boolean) => {
     setUser(newUser);
-    localStorage.setItem('user', JSON.stringify(newUser));
+    setMangaList(loadLibrary(newUser.id));
     setShowAuth(false);
-    showToast(`Welcome back, ${newUser.username}!`);
+    showToast((isNewAccount ? t.accountCreated : t.welcomeUser).replace('{name}', newUser.username));
   };
 
   const handleLogout = () => {
+    logout();
     setUser(null);
-    localStorage.removeItem('user');
-    showToast('Logged out successfully');
+    setMangaList([]);
+    setSelectedManga(null);
+    setActiveTab('home');
+    showToast(t.loggedOut);
   };
+
+  const closeAuth = useCallback(() => setShowAuth(false), []);
 
   const updateProgress = (id: string, chapter: number) => {
     setMangaList(prev => prev.map(m => {
@@ -186,7 +228,7 @@ const App: React.FC = () => {
       }
       return m;
     }));
-    showToast(`${t.statusUpdated} ${status}`);
+    showToast(`${t.statusUpdated}: ${t.statusNames[status]}`);
   };
 
   const addOrUpdateTitle = (manga: MangaTitle) => {
@@ -212,7 +254,7 @@ const App: React.FC = () => {
 
   return (
       <div className="flex h-screen bg-slate-950 text-slate-200 selection:bg-indigo-500/30 overflow-hidden font-['Inter']">
-        {isSidebarOpen && window.innerWidth < 1024 && (
+        {isSidebarOpen && (
             <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
         )}
 
@@ -248,7 +290,7 @@ const App: React.FC = () => {
                       alt="hero"
                   />
 
-                  <div className="absolute top-6 right-6 md:top-12 md:right-12 z-20 flex flex-wrap justify-end gap-3">
+                  <div className="absolute top-6 right-6 md:top-12 md:right-12 z-30 flex flex-wrap justify-end gap-3">
                     <button onClick={toggleLanguage} className="p-3 bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl hover:bg-white/10 text-white transition-all">
                       <Languages size={18} />
                     </button>
@@ -261,9 +303,14 @@ const App: React.FC = () => {
                       <Ghost size={16} /> {includeAdult ? t.nsfwOn : t.sfwOnly}
                     </button>
                     {user ? (
+                        <>
+                        <span className="hidden sm:flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-sm font-bold text-white">
+                          <UserIcon size={16} /> {user.username}
+                        </span>
                         <button onClick={handleLogout} className="flex items-center gap-3 px-6 py-3 bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl hover:bg-rose-600/20 transition-all text-sm font-black uppercase tracking-widest text-white">
                           <LogOut size={16} /> {t.logout}
                         </button>
+                        </>
                     ) : (
                         <button onClick={() => setShowAuth(true)} className="flex items-center gap-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 shadow-xl shadow-indigo-600/20 rounded-2xl transition-all text-sm font-black uppercase tracking-widest text-white">
                           <UserIcon size={16} /> {t.login}
@@ -273,13 +320,13 @@ const App: React.FC = () => {
 
                   <div className="relative p-6 md:p-20 z-20 space-y-6 max-w-5xl pb-12 md:pb-24">
                     <div className="flex items-center gap-2 text-indigo-400 font-black uppercase tracking-[0.4em] text-[10px] md:text-[11px]">
-                      <Sparkles size={18} className="animate-spin-slow" /> Spotlight
+                      <Sparkles size={18} /> {t.spotlight}
                     </div>
                     <h1 className="text-5xl md:text-9xl font-black text-white uppercase tracking-tighter leading-[0.85] italic">
                       MYMANGA<br/>LIST
                     </h1>
                     <p className="text-slate-300 text-sm md:text-xl font-medium max-w-xl leading-relaxed opacity-90 drop-shadow-lg">
-                      {t.explore}. Track your reading history, find the latest hits, and manage your progress in style.
+                      {t.explore}. {t.heroText}
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 pt-4">
                       <button onClick={() => handleTabChange('search')} className="w-full sm:w-auto px-10 py-5 bg-white text-black font-black uppercase tracking-widest text-[11px] rounded-full hover:scale-105 transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-95">
@@ -295,18 +342,18 @@ const App: React.FC = () => {
                 <div className="px-6 md:px-20 mt-0 md:-mt-16 relative z-30 grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 mb-20">
                   <div className="p-8 bg-slate-900/80 backdrop-blur-3xl rounded-[2.5rem] border border-white/5 space-y-4 hover:border-indigo-500/40 transition-all">
                     <div className="w-12 h-12 bg-indigo-600/20 rounded-xl flex items-center justify-center text-indigo-400"><TrendingUp size={24} /></div>
-                    <h3 className="text-xl font-black uppercase text-white">Trending</h3>
-                    <p className="text-slate-500 text-sm font-semibold">Real-time community insights from major global databases.</p>
+                    <h3 className="text-xl font-black uppercase text-white">{t.trending}</h3>
+                    <p className="text-slate-500 text-sm font-semibold">{t.trendingText}</p>
                   </div>
                   <div className="p-8 bg-slate-900/80 backdrop-blur-3xl rounded-[2.5rem] border border-white/5 space-y-4 hover:border-emerald-500/40 transition-all">
                     <div className="w-12 h-12 bg-emerald-600/20 rounded-xl flex items-center justify-center text-emerald-400"><Layout size={24} /></div>
-                    <h3 className="text-xl font-black uppercase text-white">Smart Progress</h3>
-                    <p className="text-slate-500 text-sm font-semibold">One-tap chapter logging with intelligent limits.</p>
+                    <h3 className="text-xl font-black uppercase text-white">{t.smartProgress}</h3>
+                    <p className="text-slate-500 text-sm font-semibold">{t.smartProgressText}</p>
                   </div>
                   <div className="p-8 bg-slate-900/80 backdrop-blur-3xl rounded-[2.5rem] border border-white/5 space-y-4 hover:border-purple-500/40 transition-all">
                     <div className="w-12 h-12 bg-purple-600/20 rounded-xl flex items-center justify-center text-purple-400"><ShieldCheck size={24} /></div>
-                    <h3 className="text-xl font-black uppercase text-white">Safe Auth</h3>
-                    <p className="text-slate-500 text-sm font-semibold">Keep your library private with localized storage and JWT simulation.</p>
+                    <h3 className="text-xl font-black uppercase text-white">{t.privateLibrary}</h3>
+                    <p className="text-slate-500 text-sm font-semibold">{t.privateLibraryText}</p>
                   </div>
                 </div>
               </div>
@@ -347,7 +394,17 @@ const App: React.FC = () => {
                 </header>
 
                 <div className="relative z-10">
-                  {activeTab === 'dashboard' && <Dashboard mangaList={mangaList} updateProgress={updateProgress} updateStatus={updateStatus} onRemove={removeFromLibrary} onSelect={setSelectedManga} language={language} hideLabels={hideLabels} />}
+                  {activeTab === 'dashboard' && !user && (
+                      <div className="max-w-xl mx-auto text-center py-20 space-y-4">
+                        <BookOpen size={40} className="mx-auto text-slate-600" />
+                        <p className="text-xl font-black text-white">{t.signInForLibrary}</p>
+                        <p className="text-slate-500 text-sm">{t.signInForLibrarySub}</p>
+                        <button onClick={() => setShowAuth(true)} className="inline-flex items-center gap-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-2xl text-sm font-black uppercase tracking-widest text-white">
+                          <UserIcon size={16} /> {t.login}
+                        </button>
+                      </div>
+                  )}
+                  {activeTab === 'dashboard' && user && <Dashboard mangaList={mangaList} updateProgress={updateProgress} updateStatus={updateStatus} onRemove={removeFromLibrary} onSelect={setSelectedManga} onDiscover={() => handleTabChange('search')} language={language} hideLabels={hideLabels} />}
                   {activeTab === 'search' && <SearchTitle onAdd={addOrUpdateTitle} mangaList={mangaList} includeAdult={includeAdult} onSelect={setSelectedManga} language={language} hideLabels={hideLabels} />}
                   {activeTab === 'mentor' && <RoadmapView />}
                 </div>
@@ -355,7 +412,7 @@ const App: React.FC = () => {
           )}
         </main>
 
-        {showAuth && <Auth onClose={() => setShowAuth(false)} onLogin={handleLogin} language={language} />}
+        {showAuth && <Auth onClose={closeAuth} onLogin={handleLogin} language={language} />}
         {selectedManga && <MangaModal manga={selectedManga} onClose={() => setSelectedManga(null)} language={language} />}
       </div>
   );

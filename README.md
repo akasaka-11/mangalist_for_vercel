@@ -1,20 +1,32 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# MyMangaList
 
-# Run and deploy your AI Studio app
+Manga / manhwa tracker: search titles via the public [AniList](https://anilist.co) GraphQL API,
+add them to your library and track chapters read.
 
-This contains everything you need to run your app locally.
+Stack: React 19 + TypeScript + Vite, Tailwind (CDN), deployed on Vercel.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1Xgr8MAgB-ytGSwARRohJczCcASUNkeZU
+## Run locally
 
-## Run Locally
+```bash
+npm install
+npm run dev      # dev server
+npm run build    # type-check + production build into dist/
+npm run preview  # serve the production build
+```
 
-**Prerequisites:**  Node.js
+## Accounts (important)
 
+There is no backend yet. Accounts are stored **only in the browser's localStorage**
+(`lib/auth.ts`): passwords are never stored in plain text, only a salted PBKDF2-SHA256 hash,
+and sign-in requires a registered account with the correct password. This is still
+**not real security** — anyone with access to the browser can read or change local data, and
+accounts don't sync between devices. Move to a real auth service (e.g. Supabase Auth) before
+storing anything that matters.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Each account has its own library (`lib/library.ts`). A library saved by the old version of the
+app is handed to the first account that signs in on that browser.
+
+## Environment variables
+
+Never expose `process.env` through Vite's `define`: anything there ends up in the public JS
+bundle. Only `import.meta.env.VITE_*` values are meant to be public.
