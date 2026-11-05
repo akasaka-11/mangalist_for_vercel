@@ -19,7 +19,7 @@ interface DashboardProps {
 }
 
 type Labels = {
-  [K in 'reading' | 'finished' | 'plan' | 'dropped' | 'all' | 'remove' | 'ch' | 'ongoing' | 'chapterInput' | 'prevChapter' | 'latestHint' | 'unknownHint'
+  [K in 'reading' | 'finished' | 'plan' | 'dropped' | 'all' | 'remove' | 'ongoing' | 'chapterInput' | 'prevChapter' | 'latestHint' | 'unknownHint'
     | 'nextChapter' | 'status' | 'emptyTitle' | 'emptySub' | 'emptyFilter' | 'discover' | 'confirmRemove']: string;
 };
 
@@ -68,7 +68,7 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
 
   const labels: Labels = ({ en: {
     reading: 'Reading', finished: 'Completed', plan: 'Plan to read', dropped: 'Dropped', all: 'All',
-    remove: 'Remove from library', ch: 'Ch.', ongoing: 'Ongoing', chapterInput: 'Current chapter',
+    remove: 'Remove from library', ongoing: 'Ongoing', chapterInput: 'Current chapter',
     latestHint: 'Latest known chapter: {latest} (MangaUpdates). You can mark up to {limit}.',
     unknownHint: 'Number of chapters is unknown',
     prevChapter: 'Previous chapter', nextChapter: 'Next chapter', status: 'Status',
@@ -76,7 +76,7 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
     emptyFilter: 'No titles with this status yet', discover: 'Discover', confirmRemove: 'Remove "{title}" from your library?'
   }, ru: {
     reading: 'Читаю', finished: 'Прочитано', plan: 'В планах', dropped: 'Брошено', all: 'Все',
-    remove: 'Удалить из библиотеки', ch: 'Гл.', ongoing: 'Выходит', chapterInput: 'Текущая глава',
+    remove: 'Удалить из библиотеки', ongoing: 'Выходит', chapterInput: 'Текущая глава',
     latestHint: 'Последняя известная глава: {latest} (MangaUpdates). Можно отметить до {limit}.',
     unknownHint: 'Число глав неизвестно',
     prevChapter: 'Предыдущая глава', nextChapter: 'Следующая глава', status: 'Статус',
@@ -84,7 +84,7 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
     emptyFilter: 'Пока нет тайтлов с этим статусом', discover: 'Поиск', confirmRemove: 'Удалить «{title}» из библиотеки?'
   }, kk: {
     reading: 'Оқып жүрмін', finished: 'Оқып шықтым', plan: 'Жоспарда', dropped: 'Тастадым', all: 'Барлығы',
-    remove: 'Кітапханадан өшіру', ch: 'Тар.', ongoing: 'Шығып жатыр', chapterInput: 'Ағымдағы тарау',
+    remove: 'Кітапханадан өшіру', ongoing: 'Шығып жатыр', chapterInput: 'Ағымдағы тарау',
     latestHint: 'Белгілі соңғы тарау: {latest} (MangaUpdates). {limit}-ге дейін белгілеуге болады.',
     unknownHint: 'Тараулар саны белгісіз',
     prevChapter: 'Алдыңғы тарау', nextChapter: 'Келесі тарау', status: 'Күйі',
@@ -284,7 +284,6 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
                             </button>
 
                             <div className="flex flex-1 items-baseline justify-center min-w-0 whitespace-nowrap text-slate-500 text-xs">
-                              <span className="hidden sm:inline mr-0.5">{labels.ch}</span>
                               <ChapterInput
                                   value={manga.currentChapter}
                                   max={limit}

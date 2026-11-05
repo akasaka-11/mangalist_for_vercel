@@ -422,7 +422,7 @@ const App: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="relative p-6 md:p-20 z-20 space-y-6 max-w-5xl pb-12 md:pb-24">
+                  <div className="relative px-6 md:px-20 pt-28 md:pt-44 z-20 space-y-6 max-w-5xl pb-12 md:pb-24">
                     <div className="flex items-center gap-2 text-indigo-400 font-black uppercase tracking-[0.4em] text-[10px] md:text-[11px]">
                       <Sparkles size={18} /> {t.spotlight}
                     </div>
