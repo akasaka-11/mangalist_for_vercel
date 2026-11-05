@@ -33,6 +33,8 @@ import Auth, { AuthMode } from './components/Auth';
 import { logout, onAuthChange } from './lib/auth';
 import { loadLibrary, saveLibrary } from './lib/library';
 import { readJson, writeJson } from './lib/storage';
+import { clampChapter, needsLatestChapterCheck } from './lib/chapters';
+import { fetchLatestChapter } from './lib/latestChapter';
 
 export type Language = 'en' | 'ru';
 
@@ -153,6 +155,37 @@ const App: React.FC = () => {
     if (user) saveLibrary(user.id, mangaList);
   }, [user, mangaList]);
 
+  // Ongoing series have no chapter count on AniList: look up the latest
+  // released chapter (via /api/latest-chapter) one title at a time, at most
+  // once a day per title. Failed lookups are retried on the next page load.
+  const mangaListRef = useRef(mangaList);
+  mangaListRef.current = mangaList;
+  const failedLookups = useRef(new Set<string>());
+  const pendingLookups = mangaList
+    .filter(m => needsLatestChapterCheck(m) && !failedLookups.current.has(m.id))
+    .map(m => m.id)
+    .join(',');
+  useEffect(() => {
+    if (!user || !pendingLookups) return;
+    const controller = new AbortController();
+    (async () => {
+      for (const id of pendingLookups.split(',')) {
+        const manga = mangaListRef.current.find(m => m.id === id);
+        if (!manga) continue;
+        const info = await fetchLatestChapter(manga, controller.signal);
+        if (controller.signal.aborted) return;
+        if (!info) {
+          failedLookups.current.add(id);
+          continue;
+        }
+        setMangaList(prev => prev.map(m => m.id === id
+          ? { ...m, latestChapter: info.latestChapter, latestChapterUrl: info.url, latestChapterCheckedAt: Date.now() }
+          : m));
+      }
+    })();
+    return () => controller.abort();
+  }, [user, pendingLookups]);
+
   useEffect(() => {
     writeJson(PREFS_KEY, { language, includeAdult, hideLabels } satisfies Prefs);
     document.documentElement.lang = language;
@@ -252,10 +285,7 @@ const App: React.FC = () => {
   const updateProgress = (id: string, chapter: number) => {
     setMangaList(prev => prev.map(m => {
       if (m.id === id) {
-        const cleanChapter = isNaN(chapter) ? 0 : chapter;
-        const max = m.totalChapters > 0 ? m.totalChapters : 99999;
-        const validatedChapter = Math.min(Math.max(0, cleanChapter), max);
-        return { ...m, currentChapter: validatedChapter };
+        return { ...m, currentChapter: clampChapter(m, chapter) };
       }
       return m;
     }));

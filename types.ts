@@ -32,5 +32,10 @@ export interface MangaTitle {
   userReview?: string;
   lastUpdated: string;
   isAdult?: boolean;
+  /** For ongoing series (totalChapters = 0): latest released chapter from MangaUpdates, null if not found. */
+  latestChapter?: number | null;
+  latestChapterUrl?: string;
+  /** Epoch ms of the last successful lookup. */
+  latestChapterCheckedAt?: number;
 }
 

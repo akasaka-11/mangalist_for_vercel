@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { MangaTitle, MangaStatus } from '../types';
+import { CHAPTER_MARGIN, chapterLimit, NO_LIMIT } from '../lib/chapters';
 import { Plus, Minus, BookOpen, CheckCircle, XCircle, Trash2, Star, Clock, Search, ChevronDown } from 'lucide-react';
 
 interface DashboardProps {
@@ -15,7 +16,7 @@ interface DashboardProps {
 }
 
 type Labels = {
-  [K in 'reading' | 'finished' | 'plan' | 'dropped' | 'all' | 'remove' | 'ch' | 'ongoing' | 'chapterInput' | 'prevChapter'
+  [K in 'reading' | 'finished' | 'plan' | 'dropped' | 'all' | 'remove' | 'ch' | 'ongoing' | 'chapterInput' | 'prevChapter' | 'latestHint' | 'unknownHint'
     | 'nextChapter' | 'status' | 'emptyTitle' | 'emptySub' | 'emptyFilter' | 'discover' | 'confirmRemove']: string;
 };
 
@@ -65,12 +66,16 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
   const labels: Labels = language === 'en' ? {
     reading: 'Reading', finished: 'Completed', plan: 'Plan to read', dropped: 'Dropped', all: 'All',
     remove: 'Remove from library', ch: 'Ch.', ongoing: 'Ongoing', chapterInput: 'Current chapter',
+    latestHint: 'Latest known chapter: {latest} (MangaUpdates). You can mark up to {limit}.',
+    unknownHint: 'Number of chapters is unknown',
     prevChapter: 'Previous chapter', nextChapter: 'Next chapter', status: 'Status',
     emptyTitle: 'Your library is empty', emptySub: 'Find a series in Discover and add it to your list.',
     emptyFilter: 'No titles with this status yet', discover: 'Discover', confirmRemove: 'Remove "{title}" from your library?'
   } : {
     reading: 'Читаю', finished: 'Прочитано', plan: 'В планах', dropped: 'Брошено', all: 'Все',
     remove: 'Удалить из библиотеки', ch: 'Гл.', ongoing: 'Выходит', chapterInput: 'Текущая глава',
+    latestHint: 'Последняя известная глава: {latest} (MangaUpdates). Можно отметить до {limit}.',
+    unknownHint: 'Число глав неизвестно',
     prevChapter: 'Предыдущая глава', nextChapter: 'Следующая глава', status: 'Статус',
     emptyTitle: 'Библиотека пуста', emptySub: 'Найдите тайтл в поиске и добавьте его в список.',
     emptyFilter: 'Пока нет тайтлов с этим статусом', discover: 'Поиск', confirmRemove: 'Удалить «{title}» из библиотеки?'
@@ -152,8 +157,15 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
                 const style = STATUS_STYLE[manga.status];
                 const displayTitle = getDisplayTitle(manga);
                 const hasTotal = manga.totalChapters > 0;
-                const progressPercent = hasTotal ? Math.min(100, (manga.currentChapter / manga.totalChapters) * 100) : 0;
-                const isAtMax = hasTotal && manga.currentChapter >= manga.totalChapters;
+                const latest = !hasTotal && manga.latestChapter ? Math.floor(manga.latestChapter) : null;
+                const limit = chapterLimit(manga);
+                const progressBase = hasTotal ? manga.totalChapters : latest;
+                const progressPercent = progressBase ? Math.min(100, (manga.currentChapter / progressBase) * 100) : 0;
+                const isAtMax = limit !== NO_LIMIT && manga.currentChapter >= limit;
+                const totalText = hasTotal ? String(manga.totalChapters) : latest ? `~${latest}` : '?';
+                const totalHint = hasTotal ? undefined
+                  : latest ? labels.latestHint.replace('{latest}', String(latest)).replace('{limit}', String(latest + CHAPTER_MARGIN))
+                  : labels.unknownHint;
 
                 return (
                     <article key={manga.id} className="group flex flex-col bg-slate-900 rounded-2xl border border-slate-800 hover:border-slate-700 overflow-hidden transition-colors">
@@ -182,7 +194,7 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
                           <Trash2 size={14} />
                         </button>
 
-                        {hasTotal && (
+                        {progressBase && (
                             <div className="absolute inset-x-0 bottom-0 h-1 bg-slate-950/60">
                               <div className={`h-full ${style.bar} transition-all duration-500`} style={{ width: `${progressPercent}%` }} />
                             </div>
@@ -227,11 +239,11 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
                               <span className="hidden sm:inline mr-0.5">{labels.ch}</span>
                               <ChapterInput
                                   value={manga.currentChapter}
-                                  max={hasTotal ? manga.totalChapters : 99999}
+                                  max={limit}
                                   label={labels.chapterInput}
                                   onCommit={(n) => updateProgress(manga.id, n)}
                               />
-                              <span className="tabular-nums">/ {hasTotal ? manga.totalChapters : '?'}</span>
+                              <span className={`tabular-nums ${totalHint ? 'cursor-help' : ''}`} title={totalHint}>/ {totalText}</span>
                             </div>
 
                             <button

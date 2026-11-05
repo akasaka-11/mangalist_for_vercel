@@ -89,7 +89,7 @@ const MangaModal: React.FC<MangaModalProps> = ({ manga, onClose, language }) => 
           <div className="grid grid-cols-2 gap-4">
              <div className="p-5 bg-slate-950/40 rounded-[2rem] border border-white/5 space-y-1">
                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{labels.chapters}</p>
-               <p className="text-xl font-bold text-indigo-400">{manga.totalChapters || labels.ongoing}</p>
+               <p className="text-xl font-bold text-indigo-400">{manga.totalChapters || (manga.latestChapter ? `~${Math.floor(manga.latestChapter)} · ${labels.ongoing}` : labels.ongoing)}</p>
              </div>
              <div className="p-5 bg-slate-950/40 rounded-[2rem] border border-white/5 space-y-1">
                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{labels.updated}</p>
