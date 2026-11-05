@@ -1,10 +1,10 @@
 
 import React from 'react';
-import { Layout, Search, Code, BookOpen, X, LayoutDashboard } from 'lucide-react';
+import { Layout, Search, BookOpen, X } from 'lucide-react';
 
 interface SidebarProps {
-  activeTab: 'dashboard' | 'search' | 'mentor';
-  setActiveTab: (tab: 'dashboard' | 'search' | 'mentor') => void;
+  activeTab: 'dashboard' | 'search';
+  setActiveTab: (tab: 'dashboard' | 'search') => void;
   language: string;
   t: any;
   isOpen: boolean;
@@ -16,7 +16,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, t, isOpen, o
   const menuItems = [
     { id: 'dashboard', label: t.library, icon: <BookOpen size={20} /> },
     { id: 'search', label: t.discover, icon: <Search size={20} /> },
-    { id: 'mentor', label: t.mentor, icon: <Code size={20} /> },
   ];
 
   return (

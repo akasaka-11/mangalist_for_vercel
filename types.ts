@@ -34,12 +34,3 @@ export interface MangaTitle {
   isAdult?: boolean;
 }
 
-export interface RoadmapStep {
-  id: string;
-  title: string;
-  description: string;
-  codeSnippet?: string;
-  language?: string;
-  sqlSchema?: string;
-  apiEndpoints?: string[];
-}

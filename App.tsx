@@ -27,7 +27,6 @@ import {
 import { MangaStatus, MangaTitle, User } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
-import RoadmapView from './components/RoadmapView';
 import SearchTitle from './components/SearchTitle';
 import MangaModal from './components/MangaModal';
 import Auth, { AuthMode } from './components/Auth';
@@ -48,11 +47,8 @@ const translations = {
   en: {
     library: 'My Library',
     discover: 'Discover',
-    mentor: 'Mentor Guide',
-    roadmap: 'Technical Roadmap',
     tracking: 'Tracking progress',
     findNew: 'Find new series',
-    learnBuild: 'Learn how to build',
     alertsOn: 'Alerts On',
     alertsOff: 'Alerts Off',
     nsfwOn: 'NSFW ON',
@@ -93,11 +89,8 @@ const translations = {
   ru: {
     library: 'Библиотека',
     discover: 'Поиск',
-    mentor: 'Гайд ментора',
-    roadmap: 'Дорожная карта',
     tracking: 'Отслеживание',
     findNew: 'Новинки',
-    learnBuild: 'Как это сделано',
     alertsOn: 'Увед. ВКЛ',
     alertsOff: 'Увед. ВЫКЛ',
     nsfwOn: '18+ ВКЛ',
@@ -138,7 +131,7 @@ const translations = {
 };
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'search' | 'mentor' | 'home'>('home');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'search' | 'home'>('home');
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [mangaList, setMangaList] = useState<MangaTitle[]>([]);
@@ -209,7 +202,7 @@ const App: React.FC = () => {
     setShowAuth(true);
   };
 
-  const handleTabChange = (tab: 'dashboard' | 'search' | 'mentor' | 'home') => {
+  const handleTabChange = (tab: 'dashboard' | 'search' | 'home') => {
     setActiveTab(tab);
     if (window.innerWidth < 1024) setIsSidebarOpen(false);
   };
@@ -411,7 +404,7 @@ const App: React.FC = () => {
                   <div className="flex items-center gap-4 md:gap-6 w-full md:w-auto">
                     <button onClick={() => handleTabChange('home')} className="p-4 bg-slate-900 hover:bg-slate-800 rounded-2xl border border-slate-800 text-slate-400 transition-all"><ArrowLeft size={18} /></button>
                     <h1 className="text-xl md:text-5xl font-black bg-gradient-to-br from-white to-indigo-500 bg-clip-text text-transparent tracking-tighter uppercase truncate">
-                      {activeTab === 'dashboard' ? t.library : activeTab === 'search' ? t.discover : t.roadmap}
+                      {activeTab === 'dashboard' ? t.library : t.discover}
                     </h1>
                   </div>
 
@@ -457,7 +450,6 @@ const App: React.FC = () => {
                   )}
                   {activeTab === 'dashboard' && user && <Dashboard mangaList={mangaList} updateProgress={updateProgress} updateStatus={updateStatus} onRemove={removeFromLibrary} onSelect={setSelectedManga} onDiscover={() => handleTabChange('search')} language={language} hideLabels={hideLabels} />}
                   {activeTab === 'search' && <SearchTitle onAdd={addOrUpdateTitle} mangaList={mangaList} includeAdult={includeAdult} onSelect={setSelectedManga} language={language} hideLabels={hideLabels} />}
-                  {activeTab === 'mentor' && <RoadmapView />}
                 </div>
               </div>
           )}
