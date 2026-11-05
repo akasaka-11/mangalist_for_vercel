@@ -58,7 +58,8 @@ const ChapterInput: React.FC<{ value: number; max: number; label: string; onComm
       onBlur={commit}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       onFocus={(e) => e.target.select()}
-      className="w-9 sm:w-12 bg-transparent text-center text-sm sm:text-base font-bold text-white rounded-md focus:outline-none focus:bg-slate-800 tabular-nums"
+      style={{ width: `${Math.max(text.length, 1) + 1}ch` }}
+      className="min-w-[2.5ch] bg-transparent text-center text-sm sm:text-base font-bold text-white rounded-md focus:outline-none focus:bg-slate-800 tabular-nums"
     />
   );
 };
@@ -200,7 +201,7 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
         {filteredList.length === 0 ? (
             <p className="text-center py-16 text-slate-500 font-semibold">{labels.emptyFilter}</p>
         ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-5">
+            <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(225px,1fr))] gap-3 sm:gap-5">
               {filteredList.map((manga) => {
                 const style = STATUS_STYLE[manga.status];
                 const displayTitle = getDisplayTitle(manga);
@@ -283,14 +284,14 @@ const Dashboard: React.FC<DashboardProps> = ({ mangaList, updateProgress, update
                               <Minus size={16} />
                             </button>
 
-                            <div className="flex flex-1 items-baseline justify-center min-w-0 whitespace-nowrap text-slate-500 text-xs">
+                            <div className="flex flex-1 items-baseline justify-center min-w-0 overflow-hidden whitespace-nowrap text-slate-500 text-xs">
                               <ChapterInput
                                   value={manga.currentChapter}
                                   max={limit}
                                   label={labels.chapterInput}
                                   onCommit={(n) => updateProgress(manga.id, n)}
                               />
-                              <span className={`tabular-nums ${totalHint ? 'cursor-help' : ''}`} title={totalHint}>/ {totalText}</span>
+                              <span className={`min-w-0 truncate tabular-nums ${totalHint ? 'cursor-help' : ''}`} title={totalHint}>/ {totalText}</span>
                             </div>
 
                             <button
